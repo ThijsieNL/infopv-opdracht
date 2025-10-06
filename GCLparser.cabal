@@ -12,8 +12,8 @@ build-type:          Simple
 extra-source-files:  README.md
 cabal-version:       >=1.10
 
-Library
-  exposed-modules:     GCLParser.Parser
+executable infopv
+  other-modules:     GCLParser.Parser
                      , GCLParser.GCLDatatype
                      , GCLParser.PrettyPrint
                      , GCLInterpreter
@@ -39,3 +39,4 @@ Library
   GHC-Options:         -Wall
   default-extensions:  TupleSections
                      , NamedFieldPuns
+  main-is:             Main.hs
