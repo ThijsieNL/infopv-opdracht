@@ -8,7 +8,7 @@ import GCLParser.Parser (parseGCLfile)
 
 main :: IO ()
 main =
-  parseGCLfile "examples/min.gcl" >>= \case
+  parseGCLfile "examples/E.gcl" >>= \case
     Left err -> putStrLn $ "Error parsing GCL file: " ++ err
     Right program -> do
       putStrLn "Parsed GCL Program:"
@@ -22,7 +22,9 @@ main =
       putStrLn "\nFiltered Statement (without asserts):"
       print filteredStmt
 
-      let wlpFormula = wlp filteredStmt (LitB True) -- assuming postcondition is true
+      let k = 3 -- The fixed point bound
+
+      let wlpFormula = wlp k filteredStmt (LitB True) -- assuming postcondition is true
       putStrLn "\nWLP Formula:"
       print wlpFormula
 
@@ -35,8 +37,8 @@ transformAsserts =
         onAssume = Assert
       }
 
-wlp :: Stmt -> Expr -> Expr
-wlp =
+wlp :: Int -> Stmt -> Expr -> Expr
+wlp k =
   foldStmt
     StmtAlgebra
       { onSkip = id,
@@ -47,10 +49,16 @@ wlp =
         onDrefAssign = \_ _ -> error "WLP for dereference assignments not implemented yet",
         onSeq = (.), -- function composition
         onIfThenElse = \guard f1 f2 post -> opAnd (opImplication guard (f1 post)) (opImplication (OpNeg guard) (f2 post)),
-        onWhile = \_ _ -> error "WLP for While loops not implemented yet",
+        onWhile = iterateWlpBounded k,
         onBlock = \_ f -> f,
         onTryCatch = \_ _ _ -> error "WLP for TryCatch not implemented yet"
       }
+
+-- We need to create a fixed-point combinator for while loops
+iterateWlpBounded :: Int -> Expr -> (Expr -> Expr) -> Expr -> Expr
+iterateWlpBounded 0 _ _ post = post
+iterateWlpBounded k guard f post =
+  opAnd (opImplication (OpNeg guard) post) (opImplication guard (f (iterateWlpBounded (k-1) guard f post)))
 
 substitute :: String -> Expr -> Expr -> Expr
 substitute var new post = foldExpr substituteAlgebra post var new
@@ -72,7 +80,7 @@ substituteAlgebra = ExprAlgebra
     onCond = \guard e1 e2 var new -> Cond (guard var new) (e1 var new) (e2 var new),
     onNewStore = \_ _ -> NewStore,
     onDereference = \ptr _ _ -> Dereference ptr -- This probably is wrong 
-  } 
+  }
 
 {-
 necessities:
