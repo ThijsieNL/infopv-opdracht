@@ -52,9 +52,6 @@ wlp =
         onTryCatch = \_ _ _ -> error "WLP for TryCatch not implemented yet"
       }
 
--- substituteAlgebra :: ExprAlgebra (String -> Expr -> Expr -> Expr)
--- substituteAlgebra = undefined
-
 substitute :: String -> Expr -> Expr -> Expr
 substitute var new post = foldExpr substituteAlgebra post var new
 
@@ -68,8 +65,8 @@ substituteAlgebra = ExprAlgebra
     onArrayElem = \arr index var new -> ArrayElem (arr var new) (index var new),
     onOpNeg = \e var new -> OpNeg (e var new),
     onBinopExpr = \op e1 e2 var new -> BinopExpr op (e1 var new) (e2 var new),
-    onForall = \v e var new -> if v == var then Forall v new else Forall v (e var new),
-    onExists = \v e var new -> if v == var then Exists v new else Exists v (e var new),
+    onForall = \v e var new -> if v == var then Forall v new else Forall v (e var new), -- Is this correct?
+    onExists = \v e var new -> if v == var then Exists v new else Exists v (e var new), -- Is this correct?
     onSizeOf = \arr var new -> SizeOf (arr var new),
     onRepBy = \arr index val var new -> RepBy (arr var new) (index var new) (val var new),
     onCond = \guard e1 e2 var new -> Cond (guard var new) (e1 var new) (e2 var new),
