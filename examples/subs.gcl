@@ -1,0 +1,4 @@
+subs(x:int | x:int){
+  x:=x+3 ;
+  x:=x+1
+}
