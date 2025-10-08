@@ -8,6 +8,13 @@ import GCLParser.Parser (parseGCLfile)
 import Z3.Monad hiding (substitute)
 import Control.Monad.IO.Class
 
+data ProgramTree = Node Stmt [ProgramTree]
+
+-- data TreeNode = TreeNode
+--   { stmt :: Stmt,
+--     children :: [TreeNode]
+--   }
+
 main :: IO ()
 main =
   parseGCLfile "examples/E.gcl" >>= \case
@@ -25,7 +32,15 @@ main =
       -- putStrLn "\nFiltered Statement (without asserts):"
       -- print filteredStmt
 
+      -- make a tree of paths through the program
+
+      -- find the WLP of the program tree
+
+      let programTree = makeProgramTree programStmt
       let k = 3 -- The fixed point bound
+      let wlp = findWLP k programTree
+
+
       let wlpFormula = reduceExpr $ stmtToWlp k programStmt (LitB True)
       putStrLn "\nWLP Formula:"
       print wlpFormula
@@ -39,6 +54,25 @@ main =
       validateExpr wlpFormula >>= \case
         True -> putStrLn "The WLP formula is valid."
         False -> putStrLn "The WLP formula is not valid."
+
+makeProgramTree :: Stmt -> ProgramTree
+makeProgramTree stmt = case stmt of
+  Seq s1 s2 -> 
+    let Node _ children1 = makeProgramTree s1
+        Node _ children2 = makeProgramTree s2
+    in Node stmt (children1 ++ children2)
+  IfThenElse _ s1 s2 -> 
+    Node stmt [makeProgramTree s1, makeProgramTree s2]
+  While _ body -> 
+    Node stmt [makeProgramTree body]
+  _ -> Node stmt []
+
+findWLP :: Int -> ProgramTree -> Expr 
+findWLP k (Node stmt children) =
+  let childWLPs = map (findWLP k) children
+      combinedChildWLP = foldr opAnd (LitB True) childWLPs
+  in stmtToWlp k stmt combinedChildWLP
+
 
 validateExpr :: Expr -> IO Bool
 validateExpr expr = evalZ3 $ do
