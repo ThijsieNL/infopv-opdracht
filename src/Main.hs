@@ -65,7 +65,10 @@ makeProgramTree stmt = case stmt of
     Node stmt [makeProgramTree s1, makeProgramTree s2]
   While _ body -> 
     Node stmt [makeProgramTree body]
+  Block _ body ->
+    Node stmt [makeProgramTree body]
   _ -> Node stmt []
+
 
 findWLP :: Int -> ProgramTree -> Expr 
 findWLP k (Node stmt children) =
