@@ -26,7 +26,7 @@ main =
       -- print filteredStmt
 
       let k = 3 -- The fixed point bound
-      let wlpFormula = reduceExpr $ wlp k programStmt (LitB True)
+      let wlpFormula = reduceExpr $ stmtToWlp k programStmt (LitB True)
       putStrLn "\nWLP Formula:"
       print wlpFormula
 
@@ -110,8 +110,8 @@ reduceAlgebra = defaultExprAlgebra {
       _ -> BinopExpr op e1 e2
 }
 
-wlp :: Int -> Stmt -> Expr -> Expr
-wlp k =
+stmtToWlp :: Int -> Stmt -> Expr -> Expr
+stmtToWlp k =
   foldStmt
     StmtAlgebra
       { onSkip = id,
