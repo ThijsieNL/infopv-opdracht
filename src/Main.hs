@@ -1,24 +1,55 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
 import Algebra
+import Control.Monad.IO.Class
 import GCLParser.GCLDatatype
 import GCLParser.Parser (parseGCLfile)
+import Options.Applicative hiding (str)
 import Z3.Monad hiding (substitute)
-import Control.Monad.IO.Class
-import System.Directory.Internal.Prelude (getArgs)
 
+data Options = Options
+  { gclFile :: FilePath,
+    k :: Int,
+    n :: Int
+  }
+  deriving (Show)
+
+opts :: Parser Options
+opts =
+  Options
+    <$> strArgument
+      ( metavar "FILE"
+          <> help "The GCL file to process"
+          <> completer (bashCompleter "file")
+      )
+    <*> option
+      auto
+      ( short 'k'
+          <> metavar "NUM"
+          <> help "The fixed point bound"
+          <> value 3
+          <> showDefault
+      )
+    <*> option
+      auto
+      ( short 'n'
+          <> metavar "NUM"
+          <> help "The maximum program execution depth"
+          <> value 10
+          <> showDefault
+      )
 
 main :: IO ()
-main =
-  getArgs >>= \case
-    [filePath] -> processGCLFile filePath
-    _ -> putStrLn "Usage: cabal run infopv <path_to_gcl_file>" 
+main = processGCLFile =<< execParser optsParser
+  where
+    optsParser = info (opts <**> helper) (fullDesc <> progDesc "Bounded Model Checking for GCL Programs")
 
-processGCLFile :: FilePath -> IO ()
-processGCLFile filePath = do
-  parseGCLfile filePath >>= \case
+processGCLFile :: Options -> IO ()
+processGCLFile Options {..} = do
+  parseGCLfile gclFile >>= \case
     Left err -> putStrLn $ "Error parsing GCL file: " ++ err
     Right program -> do
       putStrLn "Parsed GCL Program:"
@@ -33,7 +64,6 @@ processGCLFile filePath = do
       -- putStrLn "\nFiltered Statement (without asserts):"
       -- print filteredStmt
 
-      let k = 3 -- The fixed point bound
       let wlpFormula = reduceExpr $ stmtToWlp k programStmt (LitB True)
       putStrLn "\nWLP Formula:"
       print wlpFormula
@@ -74,7 +104,6 @@ analyzeExpr expr = evalZ3 $ do
     Unsat -> liftIO $ putStrLn "UNSAT"
     Undef -> liftIO $ putStrLn "UNKNOWN"
 
-
 -- Filter out any assert statements from the program and convert assumes to asserts
 transformAsserts :: Stmt -> Stmt
 transformAsserts =
@@ -88,31 +117,32 @@ reduceExpr :: Expr -> Expr
 reduceExpr = foldExpr reduceAlgebra
 
 reduceAlgebra :: ExprAlgebra Expr
-reduceAlgebra = defaultExprAlgebra {
-    onOpNeg = \e -> case e of
-      LitB b -> LitB (not b)
-      OpNeg inner -> inner -- Double negation elimination
-      _ -> OpNeg e,
-    onBinopExpr = \op e1 e2 -> case (op, e1, e2) of
-      (And, LitB True, r) -> r
-      (And, l, LitB True) -> l
-      (And, LitB False, _) -> LitB False
-      (And, _, LitB False) -> LitB False
-      (Or, LitB False, r) -> r
-      (Or, l, LitB False) -> l
-      (Or, LitB True, _) -> LitB True
-      (Or, _, LitB True) -> LitB True
-      (Implication, LitB False, _) -> LitB True
-      (Implication, _, LitB True) -> LitB True
-      (Implication, LitB True, r) -> r
-      (Implication, l, LitB False) -> OpNeg l
-      (Plus, _, LitI 0) -> e1
-      (Plus, LitI 0, _) -> e2
-      (Plus, LitI i, LitI j) -> LitI (i + j)
-      (Plus, BinopExpr Plus l1 (LitI i), LitI j) -> BinopExpr Plus l1 (LitI (i + j)) -- Flatten nested additions 
-      (Minus, BinopExpr Minus l1 (LitI i), LitI j) -> BinopExpr Minus l1 (LitI (i + j)) -- Flatten nested additions 
-      _ -> BinopExpr op e1 e2
-}
+reduceAlgebra =
+  defaultExprAlgebra
+    { onOpNeg = \e -> case e of
+        LitB b -> LitB (not b)
+        OpNeg inner -> inner -- Double negation elimination
+        _ -> OpNeg e,
+      onBinopExpr = \op e1 e2 -> case (op, e1, e2) of
+        (And, LitB True, r) -> r
+        (And, l, LitB True) -> l
+        (And, LitB False, _) -> LitB False
+        (And, _, LitB False) -> LitB False
+        (Or, LitB False, r) -> r
+        (Or, l, LitB False) -> l
+        (Or, LitB True, _) -> LitB True
+        (Or, _, LitB True) -> LitB True
+        (Implication, LitB False, _) -> LitB True
+        (Implication, _, LitB True) -> LitB True
+        (Implication, LitB True, r) -> r
+        (Implication, l, LitB False) -> OpNeg l
+        (Plus, _, LitI 0) -> e1
+        (Plus, LitI 0, _) -> e2
+        (Plus, LitI i, LitI j) -> LitI (i + j)
+        (Plus, BinopExpr Plus l1 (LitI i), LitI j) -> BinopExpr Plus l1 (LitI (i + j)) -- Flatten nested additions
+        (Minus, BinopExpr Minus l1 (LitI i), LitI j) -> BinopExpr Minus l1 (LitI (i + j)) -- Flatten nested additions
+        _ -> BinopExpr op e1 e2
+    }
 
 -- TODO: Use mermaid for visualizing paths?
 
@@ -192,7 +222,6 @@ exprToZ3Algebra =
           Multiply -> mkMul [ast1, ast2]
           Divide -> mkDiv ast1 ast2
           Alias -> error "Alias operation not supported in Z3 translation",
-
       onParens = id,
       onArrayElem = undefined,
       onForall = undefined,
