@@ -22,6 +22,7 @@ executable infopv
                      , GCLLexer.Token
                      , GCLLexer.Lexer
                      , ExamplesOfSemanticFunction
+                     , Algebra
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array

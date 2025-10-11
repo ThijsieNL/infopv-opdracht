@@ -7,10 +7,18 @@ import GCLParser.GCLDatatype
 import GCLParser.Parser (parseGCLfile)
 import Z3.Monad hiding (substitute)
 import Control.Monad.IO.Class
+import System.Directory.Internal.Prelude (getArgs)
+
 
 main :: IO ()
 main =
-  parseGCLfile "examples/E.gcl" >>= \case
+  getArgs >>= \case
+    [filePath] -> processGCLFile filePath
+    _ -> putStrLn "Usage: cabal run infopv <path_to_gcl_file>" 
+
+processGCLFile :: FilePath -> IO ()
+processGCLFile filePath = do
+  parseGCLfile filePath >>= \case
     Left err -> putStrLn $ "Error parsing GCL file: " ++ err
     Right program -> do
       putStrLn "Parsed GCL Program:"
@@ -103,12 +111,10 @@ reduceAlgebra = defaultExprAlgebra {
       (Plus, LitI i, LitI j) -> LitI (i + j)
       (Plus, BinopExpr Plus l1 (LitI i), LitI j) -> BinopExpr Plus l1 (LitI (i + j)) -- Flatten nested additions 
       (Minus, BinopExpr Minus l1 (LitI i), LitI j) -> BinopExpr Minus l1 (LitI (i + j)) -- Flatten nested additions 
-      (Multiply, _, LitI 1) -> e1
-      (Multiply, LitI 1, _) -> e2
-      (Multiply, _, LitI 0) -> LitI 0
-      (Multiply, LitI 0, _) -> LitI 0
       _ -> BinopExpr op e1 e2
 }
+
+-- TODO: Use mermaid for visualizing paths?
 
 stmtToWlp :: Int -> Stmt -> Expr -> Expr
 stmtToWlp k =
