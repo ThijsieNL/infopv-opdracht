@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
 
 module Main where
 
@@ -9,6 +10,7 @@ import Z3.Monad hiding (substitute)
 import Control.Monad.IO.Class
 
 data ProgramTree = Node Stmt [ProgramTree]
+  deriving (Show)
 
 -- data TreeNode = TreeNode
 --   { stmt :: Stmt,
@@ -17,7 +19,7 @@ data ProgramTree = Node Stmt [ProgramTree]
 
 main :: IO ()
 main =
-  parseGCLfile "examples/E.gcl" >>= \case
+  parseGCLfile "examples/min.gcl" >>= \case
     Left err -> putStrLn $ "Error parsing GCL file: " ++ err
     Right program -> do
       putStrLn "Parsed GCL Program:"
@@ -36,9 +38,11 @@ main =
 
       -- find the WLP of the program tree
 
-      let programTree = makeProgramTree programStmt
       let k = 3 -- The fixed point bound
-      let wlp = findWLP k programTree
+      let programTree = makeProgramTree programStmt
+      -- let wlp = findWLP k programTree
+      putStrLn "\nProgram Tree:"
+      putStrLn (printProgramTree programTree)
 
 
       let wlpFormula = reduceExpr $ stmtToWlp k programStmt (LitB True)
@@ -55,22 +59,44 @@ main =
         True -> putStrLn "The WLP formula is valid."
         False -> putStrLn "The WLP formula is not valid."
 
+{-TODO: check the assignment, what to do with assumes and asserts in the tree.-}
 makeProgramTree :: Stmt -> ProgramTree
 makeProgramTree stmt = case stmt of
-  Seq s1 s2 -> 
-    let Node _ children1 = makeProgramTree s1
-        Node _ children2 = makeProgramTree s2
-    in Node stmt (children1 ++ children2)
-  IfThenElse _ s1 s2 -> 
-    Node stmt [makeProgramTree s1, makeProgramTree s2]
-  While _ body -> 
-    Node stmt [makeProgramTree body]
+  Assume _ -> Node stmt []
+  Assign _ _ -> Node stmt []
+  Seq s1 s2 ->
+    linkSeq (makeProgramTree s1) (makeProgramTree s2)
+  IfThenElse g s1 s2 ->
+      Node Skip [makeProgramTree (Seq (Assume g) s1), makeProgramTree (Seq (Assume (OpNeg g)) s2)]
+  While cond body ->
+    let unrollLoop 0 = Node Skip []
+        unrollLoop n =
+          let Node _ children = makeProgramTree (Seq (Assume cond) body)
+          in Node (Seq (Assume cond) body) (children ++ [unrollLoop (n - 1)])
+    in Node stmt [unrollLoop 3, Node (Assume (OpNeg cond)) []] --we do 3 unrolls for now
   Block _ body ->
     Node stmt [makeProgramTree body]
+  TryCatch _ s1 s2 ->
+    Node stmt [makeProgramTree s1, makeProgramTree s2] -- Treat try-catch like if-then-else for tree purposes
+  Assert s1 -> --check this, this is filler data... 
+    Node (Assume s1) [] -- Replace asserts with Skip, making them effectively empty
   _ -> Node stmt []
 
+{- Link two sequential program trees -}
+linkSeq :: ProgramTree -> ProgramTree -> ProgramTree
+linkSeq (Node stmt []) next = Node stmt [next]
+linkSeq (Node stmt children) next = Node stmt (map (`linkSeq` next) children)
 
-findWLP :: Int -> ProgramTree -> Expr 
+-- function to pretty print the program tree
+printProgramTree :: ProgramTree -> String
+printProgramTree = go 0
+  where
+    go :: Int -> ProgramTree -> String
+    go indent (Node stmt children) =
+      replicate indent ' ' ++ show stmt ++ concatMap (\child -> "\n" ++ go (indent + 2) child) children
+
+-- here, k is the fixed point bound for while loops
+findWLP :: Int -> ProgramTree -> Expr
 findWLP k (Node stmt children) =
   let childWLPs = map (findWLP k) children
       combinedChildWLP = foldr opAnd (LitB True) childWLPs
