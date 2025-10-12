@@ -1,6 +1,11 @@
 module Algebra where
 
-import GCLParser.GCLDatatype hiding (opAnd, opEqual, opGreaterThan, opGreaterThanEqual, opImplication, opLessThan, opLessThanEqual, opOr)
+import GCLParser.GCLDatatype
+  ( BinOp,
+    Expr (..),
+    Stmt (..),
+    VarDeclaration,
+  )
 
 data ExprAlgebra r = ExprAlgebra
   { onVar :: String -> r,

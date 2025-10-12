@@ -23,6 +23,8 @@ executable infopv
                      , GCLLexer.Lexer
                      , ExamplesOfSemanticFunction
                      , Algebra
+                     , WLP 
+                     , Tree
   -- other-extensions:
   build-depends:       base   >= 4.10
                      , array
@@ -31,6 +33,7 @@ executable infopv
                      , pretty
                      , directory
                      , z3
+                     , hashable
   hs-source-dirs:      src
   -- location to z3 bin and lib:
   extra-lib-dirs:      /usr/lib/x86_64-linux-gnu
