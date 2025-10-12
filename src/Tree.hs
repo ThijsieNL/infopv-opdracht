@@ -89,24 +89,12 @@ symbolicExecute n k node = case stmt node of
   Seq s1 s2 ->
     let n' = symbolicExecute n k node {stmt = s1}
         -- Helper function to execute s2 on the lowest children
-        -- executeOnChildren :: SymNode -> SymNode
-        -- executeOnChildren child@SymNode {children = []} = symbolicExecute n k child {stmt = s2, depth = depth child + 1}
-        -- executeOnChildren child = child {children = map executeOnChildren (children child)}
-
-        n'' = symbolicExecute2 n k n' s2
-
-     in n'' 
+        executeOnChildren :: SymNode -> SymNode
+        executeOnChildren child@SymNode {children = []} = child {children = [symbolicExecute n k child {stmt = s2, depth = depth child + 1}]}
+        executeOnChildren child = child {children = map executeOnChildren (children child)}
+     in executeOnChildren n'
   IfThenElse guard s1 s2 ->
     let trueBranch = symbolicExecute n k node {stmt = Seq (Assume guard) s1, depth = depth node + 1}
         falseBranch = symbolicExecute n k node {stmt = Seq (Assume (OpNeg guard)) s2, depth = depth node + 1}
      in node {stmt = Skip, children = [trueBranch, falseBranch]} -- TODO: Merge states if possible
   _ -> node -- Other statements not handled yet
-
-symbolicExecute2 :: Int -> Int -> SymNode -> Stmt -> SymNode
-symbolicExecute2 n k node@SymNode {children = []} stmt = node { children = [symbolicExecute n k node {stmt = stmt, depth = depth node + 1}]}
-symbolicExecute2 n k node stmt = node {children = map (\c -> symbolicExecute2 n k c stmt) (children node)}
-
-getLowestChildren :: SymNode -> [SymNode]
-getLowestChildren n = case children n of
-  [] -> [n]
-  cs -> concatMap getLowestChildren cs
