@@ -10,7 +10,7 @@ import GCLParser.Parser (parseGCLfile)
 import Options.Applicative hiding (str)
 import Z3.Monad hiding (substitute)
 import WLP
-import Tree (symbolicExecute, SymNode (SymNode), initialState, showMermaid)
+import Tree (symbolicExecute, SymNode (SymNode), showMermaid, createInitialState)
 
 data Options = Options
   { gclFile :: FilePath,
@@ -81,9 +81,10 @@ processGCLFile Options {..} = do
       -- print filteredStmt
 
       putStrLn "\nDetailed Analysis of WLP Formula with Z3:"
-      let x = symbolicExecute n k (SymNode programStmt (initialState, LitB True) 0 [])
-      putStrLn $ showMermaid x
-      print x
+      let initialState = createInitialState programStmt
+      let programTree = symbolicExecute n k (SymNode programStmt (initialState, LitB True) 0 [])
+      putStrLn $ showMermaid programTree initialState
+      print programTree
 
 validateExpr :: Expr -> IO Bool
 validateExpr expr = evalZ3 $ do
