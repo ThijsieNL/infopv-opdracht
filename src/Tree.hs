@@ -102,7 +102,7 @@ sanitizeStmt = concatMap replaceColon . show
     replaceColon c = [c]
 
 symbolicExecute :: Int -> Int -> SymNode -> SymNode
-symbolicExecute n _ node | depth node > n = node -- Stop execution when depth exceeds max depth
+symbolicExecute n _ node | depth node > n = node {stmt = Skip } -- Stop execution when depth exceeds max depth
 symbolicExecute n k node = case stmt node of
   Skip -> node -- No further execution
   Assign var expr ->
