@@ -11,6 +11,8 @@ import Options.Applicative hiding (str)
 import Z3.Monad hiding (substitute)
 import WLP
 import Tree (symbolicExecute, SymNode (SymNode), showMermaid, createInitialState)
+import Data.ByteString.Base64.URL (encode)
+import qualified Data.ByteString.Char8 as B
 
 data Options = Options
   { gclFile :: FilePath,
@@ -83,8 +85,13 @@ processGCLFile Options {..} = do
       putStrLn "\nDetailed Analysis of WLP Formula with Z3:"
       let initialState = createInitialState programStmt
       let programTree = symbolicExecute n k (SymNode programStmt (initialState, LitB True) 0 [])
-      putStrLn $ showMermaid programTree initialState
+      let diagramStr = showMermaid programTree initialState
+      putStrLn diagramStr
       print programTree
+
+      let encoded = encode (B.pack diagramStr)
+      let url = "https://mermaid.ink/img/" ++ B.unpack encoded
+      putStrLn url
 
 validateExpr :: Expr -> IO Bool
 validateExpr expr = evalZ3 $ do
@@ -161,13 +168,3 @@ exprToZ3Algebra =
       onNewStore = undefined,
       onDereference = undefined
     }
-
-{-
-necessities:
-- WLP calculation (calculate the wlp of a given program)
-    - possible also a wlp tree structure, so that we can handle conditionals
-      and loops better
-- convert WLP to Z3 format
-- Z3 interaction (send the formula to Z3 and get the result back)
-
--}

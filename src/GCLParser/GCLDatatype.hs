@@ -135,7 +135,7 @@ instance Show Expr where
     show (Dereference u)            = u ++ ".val"
     show (Parens e)                 = "(" ++ show e ++ ")"
     show (ArrayElem var index)      = show var ++ "[" ++ show index ++ "]"
-    show (OpNeg expr)               = "~" ++ show expr
+    show (OpNeg expr)               = "~(" ++ show expr ++ ")"
     show (BinopExpr op e1 e2)       = show e1 ++ " " ++ show op ++ " " ++ show e2
     show (NewStore e)               = "new(" ++ show e ++ ")"    
     show (Forall var p)             = "forall " ++ var ++ ":: " ++ show p

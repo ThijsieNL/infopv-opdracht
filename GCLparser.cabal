@@ -34,6 +34,9 @@ executable infopv
                      , directory
                      , z3
                      , hashable
+                     , bytestring
+                     , base64-bytestring
+                     
   hs-source-dirs:      src
   -- location to z3 bin and lib:
   extra-lib-dirs:      /usr/lib/x86_64-linux-gnu
