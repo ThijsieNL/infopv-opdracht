@@ -19,6 +19,7 @@ reduceAlgebra =
         (And, l, LitB True) -> l
         (And, LitB False, _) -> LitB False
         (And, _, LitB False) -> LitB False
+        (And, _, _) -> if e1 == e2 then e1 else BinopExpr op e1 e2 -- Idempotent law 
         (Or, LitB False, r) -> r
         (Or, l, LitB False) -> l
         (Or, LitB True, _) -> LitB True
@@ -27,13 +28,37 @@ reduceAlgebra =
         (Implication, _, LitB True) -> LitB True
         (Implication, LitB True, r) -> r
         (Implication, l, LitB False) -> OpNeg l
+        -- Zero and identity laws
         (Plus, _, LitI 0) -> e1
         (Plus, LitI 0, _) -> e2
-        (Plus, LitI i, LitI j) -> LitI (i + j)
-        (Plus, BinopExpr Plus l1 (LitI i), LitI j) -> BinopExpr Plus l1 (LitI (i + j)) -- Flatten nested additions
-        (Minus, BinopExpr Minus l1 (LitI i), LitI j) -> BinopExpr Minus l1 (LitI (i + j)) -- Flatten nested additions
+        (Minus, _, LitI 0) -> e1
+        (Multiply, _, LitI 1) -> e1
+        (Multiply, LitI 1, _) -> e2
+        (Multiply, _, LitI 0) -> LitI 0
+        (Multiply, LitI 0, _) -> LitI 0
+
+        -- Constant folding for arithmetic operations
+        (Plus, _, _) -> constantFolding (BinopExpr Plus e1 e2)
+        (Minus, _, _) -> constantFolding (BinopExpr Minus e1 e2)
+        (Multiply, _, _) -> constantFolding (BinopExpr Multiply e1 e2)
+        (Divide, _, _) -> constantFolding (BinopExpr Divide e1 e2)
         _ -> BinopExpr op e1 e2
     }
+
+
+constantFolding :: Expr -> Expr
+constantFolding (BinopExpr op (LitI i) (LitI j)) = LitI (performArithmetic op i j)
+constantFolding (BinopExpr op (BinopExpr op' e1 (LitI i)) (LitI j)) = constantFolding (BinopExpr op' e1 (LitI (performArithmetic op i j)))
+constantFolding (BinopExpr Plus e1 (LitI i)) | i < 0 = constantFolding (BinopExpr Minus e1 (LitI (abs i))) 
+constantFolding (BinopExpr Minus e1 (LitI i)) | i < 0 = constantFolding (BinopExpr Plus e1 (LitI (abs i)))
+constantFolding e = e
+
+performArithmetic :: BinOp -> Int -> Int -> Int
+performArithmetic Plus = (+)
+performArithmetic Minus = (-)
+performArithmetic Multiply = (*)
+performArithmetic Divide = div
+performArithmetic _ = error "Unsupported operation for constant folding"
 
 
 stmtToWlp :: Int -> Stmt -> Expr -> Expr

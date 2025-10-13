@@ -10,7 +10,7 @@ import GCLParser.Parser (parseGCLfile)
 import Options.Applicative hiding (str)
 import Z3.Monad hiding (substitute)
 import WLP
-import Tree (symbolicExecute, SymNode (SymNode), showMermaid, createInitialState)
+import Tree ( showMermaid, createSymbolicTree )
 import Data.ByteString.Base64.URL (encode)
 import qualified Data.ByteString.Char8 as B
 
@@ -83,11 +83,9 @@ processGCLFile Options {..} = do
       -- print filteredStmt
 
       putStrLn "\nDetailed Analysis of WLP Formula with Z3:"
-      let initialState = createInitialState programStmt
-      let programTree = symbolicExecute n k (SymNode programStmt (initialState, LitB True) 0 [])
-      let diagramStr = showMermaid programTree initialState
+      let programTree = createSymbolicTree n k programStmt
+      let diagramStr = showMermaid programTree
       putStrLn diagramStr
-      print programTree
 
       let encoded = encode (B.pack diagramStr)
       let url = "https://mermaid.ink/img/" ++ B.unpack encoded

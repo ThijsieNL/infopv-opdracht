@@ -1,11 +1,17 @@
-module Tree where
+module Tree
+  ( showMermaid,
+    createSymbolicTree,
+    pruneSymbolicTree,
+  )
+where
 
+import Algebra
 import Data.Hashable (hash)
 import Data.List (intercalate)
 import qualified Data.Map as M
 import GCLParser.GCLDatatype hiding (stmt)
 import WLP
-import Algebra
+import Z3.Monad (Z3)
 
 type SymEnv = M.Map String Expr
 
@@ -17,8 +23,7 @@ createInitialState = foldStmt initialAlgebra
     initialAlgebra :: StmtAlgebra SymEnv
     initialAlgebra =
       StmtAlgebra
-        {
-          onAssign = \var _ -> createVar var,
+        { onAssign = \var _ -> createVar var,
           onAAssign = \var _ _ -> createVar var,
           onDrefAssign = \var _ -> createVar var,
           onBlock = flip (foldr (\(VarDeclaration var _) acc -> createVar var `M.union` acc)),
@@ -45,7 +50,7 @@ updateExprVars env expr = foldr (\(k, v) acc -> substitute k v acc) expr (M.toLi
 -- Function to add a new assumption to the path constraint
 assumeStateVar :: SymbolicState -> Expr -> SymbolicState
 assumeStateVar (env, constraint) expr =
-  let newConstraint = reduceExpr $ BinopExpr And  (updateExprVars env expr) constraint
+  let newConstraint = reduceExpr $ BinopExpr And (updateExprVars env expr) constraint
    in (env, newConstraint)
 
 -- Symbolic execution tree node
@@ -59,15 +64,15 @@ data SymNode = SymNode
 
 showSymbolicState :: SymbolicState -> String
 showSymbolicState (env, constraint) = "(" ++ intercalate ", " [k ++ " -> " ++ show v | (k, v) <- M.toList env] ++ ", " ++ show constraint ++ ")"
-    
 
 -- | Convert a SymNode tree to a Mermaid state diagram
-showMermaid :: SymNode -> SymEnv -> String
-showMermaid root initialState =
+showMermaid :: SymNode -> String
+showMermaid root =
   unlines $
     "stateDiagram-v2" : indent (origin ++ nodeLines root)
   where
     indent = map ("  " ++)
+    initialState = fst $ state root
     origin = ["0 : " ++ showSymbolicState (initialState, LitB True), "0 --> " ++ show (uniqueId root) ++ ": " ++ sanitizeStmt (stmt root)]
 
 -- Generate all node and transition lines
@@ -99,16 +104,34 @@ sanitizeStmt :: Stmt -> String
 sanitizeStmt = concatMap replaceColon . show
   where
     replaceColon ':' = "#58;"
+    replaceColon ';' = "#59;"
     replaceColon c = [c]
 
+pruneSymbolicTree :: SymNode -> Z3 SymNode
+pruneSymbolicTree node = return node -- Placeholder for future implementation
+
+createSymbolicTree :: Int -> Int -> Stmt -> SymNode
+createSymbolicTree n k s = pruneSkipNodes $ symbolicExecute n k (SymNode s (createInitialState s, LitB True) 0 [])
+
+pruneSkipNodes :: SymNode -> SymNode
+pruneSkipNodes node = node {children = filteredChildren}
+  where
+    filteredChildren = concatMap processChild (children node)
+
+    processChild child@SymNode {stmt = Skip} = children (pruneSkipNodes child) -- Merge skip's children
+    processChild child = [pruneSkipNodes child] -- Keep non-skip nodes as is
+
 symbolicExecute :: Int -> Int -> SymNode -> SymNode
-symbolicExecute n _ node | depth node > n = node {stmt = Skip } -- Stop execution when depth exceeds max depth
+symbolicExecute n _ node | depth node > n = node {stmt = Skip} -- Stop execution when depth exceeds max depth
 symbolicExecute n k node = case stmt node of
   Skip -> node -- No further execution
   Assign var expr ->
     let state' = updateStateVar (state node) var expr
      in node {state = state'}
   Assume expr -> node {state = assumeStateVar (state node) expr}
+  Seq Skip s2 ->
+    -- Skip in sequence, just execute s2
+    symbolicExecute n k node {stmt = s2}
   Seq s1 s2 ->
     let n' = symbolicExecute n k node {stmt = s1}
         -- Helper function to execute s2 on the lowest children
@@ -116,10 +139,11 @@ symbolicExecute n k node = case stmt node of
         executeOnChildren child@SymNode {children = []} = child {children = [symbolicExecute n k child {stmt = s2, depth = depth child + 1}]}
         executeOnChildren child = child {children = map executeOnChildren (children child)}
      in executeOnChildren n'
---   IfThenElse guard s1 Skip -> -- Special case for if-then without else
---     let trueBranch = symbolicExecute n k node {stmt = Seq (Assume guard) s1}
---         falseBranch = symbolicExecute n k node {stmt = Assume (OpNeg guard)}
---      in node {stmt = Skip, children = [trueBranch, falseBranch], depth = max (depth node - 1) 0}
+  IfThenElse guard s1 Skip ->
+    -- Special case for if-then without else
+    let trueBranch = symbolicExecute n k node {stmt = Seq (Assume guard) s1}
+        falseBranch = symbolicExecute n k node {stmt = Assume (OpNeg guard)}
+     in node {stmt = Skip, children = [trueBranch, falseBranch], depth = max (depth node - 1) 0}
   IfThenElse guard s1 s2 ->
     let trueBranch = symbolicExecute n k node {stmt = Seq (Assume guard) s1}
         falseBranch = symbolicExecute n k node {stmt = Seq (Assume (OpNeg guard)) s2}
