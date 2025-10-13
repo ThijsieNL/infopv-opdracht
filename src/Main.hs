@@ -10,9 +10,10 @@ import GCLParser.Parser (parseGCLfile)
 import Options.Applicative hiding (str)
 import Z3.Monad hiding (substitute)
 import WLP
-import Tree ( showMermaid, createSymbolicTree )
+import Tree ( showMermaid, createSymbolicTree, pruneSymbolicTree )
 import Data.ByteString.Base64.URL (encode)
 import qualified Data.ByteString.Char8 as B
+import Z3Utils (exprToZ3)
 
 data Options = Options
   { gclFile :: FilePath,
@@ -87,6 +88,12 @@ processGCLFile Options {..} = do
       let diagramStr = showMermaid programTree
       putStrLn diagramStr
 
+
+      putStrLn "\nPruned Symbolic Execution Tree in Mermaid format:"
+      prunedTree <- evalZ3 $ pruneSymbolicTree programTree
+      let prunedDiagramStr = showMermaid prunedTree
+      putStrLn prunedDiagramStr
+
       let encoded = encode (B.pack diagramStr)
       let url = "https://mermaid.ink/img/" ++ B.unpack encoded
       putStrLn url
@@ -125,44 +132,3 @@ transformAsserts =
       { onAssert = const Skip,
         onAssume = Assert
       }
-
-exprToZ3 :: Expr -> Z3 AST
-exprToZ3 = foldExpr exprToZ3Algebra
-
-exprToZ3Algebra :: ExprAlgebra (Z3 AST)
-exprToZ3Algebra =
-  ExprAlgebra
-    { onVar = \v -> do
-        sym <- mkStringSymbol v
-        mkIntVar sym,
-      onLitI = mkInteger . toInteger,
-      onLitB = mkBool,
-      onLitNull = mkInteger 0, -- Represent null as 0 for simplicity
-      onOpNeg = (>>= mkNot),
-      onBinopExpr = \x e1 e2 -> do
-        ast1 <- e1
-        ast2 <- e2
-        case x of
-          And -> mkAnd [ast1, ast2]
-          Or -> mkOr [ast1, ast2]
-          Implication -> mkImplies ast1 ast2
-          LessThan -> mkLt ast1 ast2
-          LessThanEqual -> mkLe ast1 ast2
-          GreaterThan -> mkGt ast1 ast2
-          GreaterThanEqual -> mkGe ast1 ast2
-          Equal -> mkEq ast1 ast2
-          Minus -> mkSub [ast1, ast2]
-          Plus -> mkAdd [ast1, ast2]
-          Multiply -> mkMul [ast1, ast2]
-          Divide -> mkDiv ast1 ast2
-          Alias -> error "Alias operation not supported in Z3 translation",
-      onParens = id,
-      onArrayElem = undefined,
-      onForall = undefined,
-      onExists = undefined,
-      onSizeOf = undefined,
-      onRepBy = undefined,
-      onCond = undefined,
-      onNewStore = undefined,
-      onDereference = undefined
-    }

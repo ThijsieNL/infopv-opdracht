@@ -11,7 +11,8 @@ import Data.List (intercalate)
 import qualified Data.Map as M
 import GCLParser.GCLDatatype hiding (stmt)
 import WLP
-import Z3.Monad (Z3)
+import Z3.Monad (Z3, Result (..), assert, check)
+import Z3Utils (exprToZ3)
 
 type SymEnv = M.Map String Expr
 
@@ -108,7 +109,29 @@ sanitizeStmt = concatMap replaceColon . show
     replaceColon c = [c]
 
 pruneSymbolicTree :: SymNode -> Z3 SymNode
+pruneSymbolicTree node@SymNode{ children = cs } | length cs > 1 = do
+  prunedChildren <- pruneUnfeasiblePaths cs
+  return node { children = prunedChildren }
+  where
+
+    pruneUnfeasiblePaths :: [SymNode] -> Z3 [SymNode]
+    pruneUnfeasiblePaths nodes = do
+      z3Results <- mapM (exprIsSat . snd . state) nodes
+      let feasibleNodes = [node' | (node', isSat) <- zip nodes z3Results, isSat]
+      mapM pruneSymbolicTree feasibleNodes
+
 pruneSymbolicTree node = return node -- Placeholder for future implementation
+
+exprIsSat :: Expr -> Z3 Bool
+exprIsSat expr = do
+  z3expr <- exprToZ3 expr
+  assert z3expr
+  result <- check
+  case result of
+    Unsat -> return False
+    Sat -> return True
+    Undef -> return True -- Treat undefined as feasible for safety
+
 
 createSymbolicTree :: Int -> Int -> Stmt -> SymNode
 createSymbolicTree n k s = pruneSkipNodes $ symbolicExecute n k (SymNode s (createInitialState s, LitB True) 0 [])
