@@ -94,6 +94,12 @@ processGCLFile Options {..} = do
       let prunedDiagramStr = showMermaid prunedTree
       putStrLn prunedDiagramStr
 
+      {-
+      TODO: turn the last assert to assert implies the symbolic state, If that holds, then the path is valid, we skip the WLP calculation.
+      Check invalid paths, and track those that lead to assertion failures.
+      -}
+
+
       let encoded = encode (B.pack diagramStr)
       let url = "https://mermaid.ink/img/" ++ B.unpack encoded
       putStrLn url

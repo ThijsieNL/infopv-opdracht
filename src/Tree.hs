@@ -179,4 +179,7 @@ symbolicExecute n k node = case stmt node of
      in symbolicExecute n k node {stmt = unroll k}
   _ -> node -- Other statements not handled yet
 
+
+-- kijk als heuristic ook naar je k. zo voorkom je een high risk low reward
+-- TODO: change n - program depth to k and remove the unroll bound
 -- TODO: Filter skip nodes and merge their children into the parent node
