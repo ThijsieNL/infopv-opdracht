@@ -11,8 +11,8 @@ import Data.List (intercalate)
 import qualified Data.Map as M
 import GCLParser.GCLDatatype hiding (stmt)
 import WLP
-import Z3.Monad (Z3, Result (..), assert, check)
 import Z3Utils (exprToZ3)
+import qualified Z3.Monad as Z3
 
 type SymEnv = M.Map String Expr
 
@@ -108,13 +108,13 @@ sanitizeStmt = concatMap replaceColon . show
     replaceColon ';' = "#59;"
     replaceColon c = [c]
 
-pruneSymbolicTree :: SymNode -> Z3 SymNode
+pruneSymbolicTree :: SymNode -> Z3.Z3 SymNode
 pruneSymbolicTree node@SymNode{ children = cs } | length cs > 1 = do
   prunedChildren <- pruneUnfeasiblePaths cs
   return node { children = prunedChildren }
   where
 
-    pruneUnfeasiblePaths :: [SymNode] -> Z3 [SymNode]
+    pruneUnfeasiblePaths :: [SymNode] -> Z3.Z3 [SymNode]
     pruneUnfeasiblePaths nodes = do
       z3Results <- mapM (exprIsSat . snd . state) nodes
       let feasibleNodes = [node' | (node', isSat) <- zip nodes z3Results, isSat]
@@ -122,15 +122,15 @@ pruneSymbolicTree node@SymNode{ children = cs } | length cs > 1 = do
 
 pruneSymbolicTree node = return node -- Placeholder for future implementation
 
-exprIsSat :: Expr -> Z3 Bool
-exprIsSat expr = do
+exprIsSat :: Expr -> Z3.Z3 Bool
+exprIsSat expr = Z3.local $ do
   z3expr <- exprToZ3 expr
-  assert z3expr
-  result <- check
+  Z3.assert z3expr
+  result <- Z3.check
   case result of
-    Unsat -> return False
-    Sat -> return True
-    Undef -> return True -- Treat undefined as feasible for safety
+    Z3.Unsat -> return False
+    Z3.Sat -> return True
+    Z3.Undef -> return True -- Treat undefined as feasible for safety
 
 
 createSymbolicTree :: Int -> Int -> Stmt -> SymNode
