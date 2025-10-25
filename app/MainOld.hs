@@ -1,7 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Main where
+module MainOld where
 
 import Algebra
 import Control.Monad.IO.Class
