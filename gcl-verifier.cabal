@@ -1,0 +1,55 @@
+name:                gcl-verifier
+version:             1.0.0
+license:             BSD3
+license-file:        LICENSE
+author:              Ruben Broere, Thijs Olijerhoek, Stefan Koppier, Wishnu Prasetya
+category:            Testing
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+library parser
+  default-language:  Haskell2010
+  hs-source-dirs:    src/Parser
+  exposed-modules:   GCLParser.GCLDatatype
+                     , GCLParser.Parser
+                     , Algebra
+  other-modules:     GCLParser.PrettyPrint
+                     , GCLInterpreter
+                     , MuGCL
+                     , GCLUtils
+                     , GCLLexer.Token
+                     , GCLLexer.Lexer
+                     , ExamplesOfSemanticFunction
+
+  build-depends:     base   >= 4.10
+                     , pretty
+                     , array
+  build-tools:       happy, alex
+  default-extensions:  TupleSections
+                     , NamedFieldPuns
+  GHC-Options:         -Wall
+
+library engine 
+  default-language:  Haskell2010
+  hs-source-dirs:    src/Engine
+  exposed-modules:   Verifier
+  other-modules:     Tree
+                     , WLP
+                     , Z3Utils 
+  build-depends:     base   >= 4.10
+                     , parser
+                     , z3
+                     , containers
+                     , hashable
+  -- location to z3 bin and lib:
+  extra-lib-dirs:      /usr/lib/x86_64-linux-gnu
+
+executable gcl-verifier
+  default-language:  Haskell2010
+  hs-source-dirs:    app
+  main-is:           Main.hs
+  build-depends:     base   >= 4.10
+                     , engine
+                     , parser
+                     , optparse-applicative
