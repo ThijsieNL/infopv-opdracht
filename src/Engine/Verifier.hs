@@ -28,7 +28,5 @@ analyzeExpr expr = evalZ3 $ do
 
 analyzeProgram :: Int -> Stmt -> IO AnalysisResult
 analyzeProgram n stmt = do
-    let tree = createSymbolicTree n stmt
-    let initialState = createInitialState stmt
-    print initialState
+    tree <- createSymbolicTree n stmt
     return $ ValidResult tree

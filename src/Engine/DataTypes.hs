@@ -18,7 +18,8 @@ data NodeData = NodeData
   { nodeDepth :: Int,
     nodeStmt :: Stmt,
     nodeState :: SymbolicState,
-    nodeValidity :: Validity
+    nodeValidity :: Validity,
+    nodeFeasibility :: Bool
   }
   deriving (Show)
 

@@ -4,21 +4,22 @@ import qualified Data.Map as M
 import GCLParser.GCLDatatype
 import DataTypes
 import Algebra
-import WLP (substitute)
+import WLP (substitute, reduceExpr)
 import qualified Z3.Monad as Z3
-import Z3Utils (exprToZ3)
+import Z3Utils (exprToZ3, exprIsSat, exprIsValid)
 import Data.Map.Internal.Debug (node)
 
 -- | Create a symbolic execution tree for a given statement up to a maximum depth
-createSymbolicTree :: Int -> Stmt -> SymbolicTree
-createSymbolicTree maxDepth stmt = pruneSkipBranches $ symbolicExecution maxDepth initialNode
+createSymbolicTree :: Int -> Stmt -> IO SymbolicTree
+createSymbolicTree maxDepth stmt = pruneSkipBranches <$> symbolicExecution maxDepth initialNode
   where
     initialState = createInitialState stmt
-    initialNode = NodeData 
+    initialNode = NodeData
       { nodeDepth = 1,
         nodeStmt = stmt,
         nodeState = initialState,
-        nodeValidity = Valid
+        nodeValidity = Valid,
+        nodeFeasibility = True
       }
 
     pruneSkipBranches :: SymbolicTree -> SymbolicTree
@@ -28,27 +29,40 @@ createSymbolicTree maxDepth stmt = pruneSkipBranches $ symbolicExecution maxDept
     pruneSkipBranches leaf = leaf
 
 -- | Create a symbolic execution tree for a given statement up to a maximum depth
-symbolicExecution :: Int -> NodeData -> SymbolicTree
-symbolicExecution n nd | nodeDepth nd >= n = Leaf nd { nodeValidity = Invalid "Max depth reached" } -- Stop execution when depth exceeds max depth
+symbolicExecution :: Int -> NodeData -> IO SymbolicTree
+symbolicExecution n nd | nodeDepth nd >= n = return $ Leaf nd { nodeValidity = Invalid "Max depth reached" } -- Stop execution when depth exceeds max depth
 symbolicExecution n nd = case nodeStmt nd of
-    Skip -> Leaf nd -- No further execution
-    Assign var expr -> Leaf nd { nodeState = updateStateVar (nodeState nd) var expr }
-    Assume expr -> Leaf nd { nodeState = assumeStateVar (nodeState nd) expr }
-    Assert expr -> Leaf nd -- TODO: Implement assertion checking 
+    Skip -> return $ Leaf nd -- No further execution
+    Assign var expr -> return $ Leaf nd { nodeState = updateStateVar (nodeState nd) var expr }
+    Assume expr -> return $ Leaf nd { nodeState = assumeStateVar (nodeState nd) expr }
+    Assert expr -> do
+      let fullExpr = BinopExpr Implication (reduceExpr $ updateExprVars (fst $ nodeState nd) expr) (reduceExpr $ snd $ nodeState nd)
+      let validityCheck = Z3.evalZ3 $ assertStateVar (nodeState nd) expr
+      do
+        isValid <- validityCheck
+        print ("Checking assertion: " ++ show fullExpr ++ " => " ++ show isValid)
+        let validity = if isValid then Valid else error "Assertion failed"
+        return $ Leaf nd { nodeValidity = validity }
+
     Seq s1 s2 ->
       let firstNode = symbolicExecution n nd { nodeStmt = s1 }
-          executeOnChildren :: SymbolicTree -> SymbolicTree
-          executeOnChildren (Leaf childNd) | nodeDepth childNd < n = Sequence childNd (symbolicExecution n childNd { nodeStmt = s2, nodeDepth = nodeDepth childNd + 1 })
-                                           | otherwise = Leaf childNd
-          executeOnChildren (Sequence childNd st) = Sequence childNd (executeOnChildren st)
-          executeOnChildren (Branch childNd l r) = Branch childNd (executeOnChildren l) (executeOnChildren r)
-      in executeOnChildren firstNode 
+          executeOnChildren :: SymbolicTree -> IO SymbolicTree
+          executeOnChildren t = case t of
+            Leaf childNd
+              | nodeDepth childNd < n -> do
+                  let secondNodeNd = childNd { nodeStmt = s2, nodeDepth = nodeDepth childNd + 1 }
+                  secondNode <- symbolicExecution n secondNodeNd
+                  return $ Sequence childNd secondNode
+              | otherwise -> return $ Leaf childNd
+            Sequence childNd st -> Sequence childNd <$> executeOnChildren st
+            Branch childNd l r -> Branch childNd <$> executeOnChildren l <*> executeOnChildren r
+        in firstNode >>= executeOnChildren
     IfThenElse guard s1 s2 ->
       let trueBranchNd = nd { nodeStmt = Seq (Assume guard) s1 }
           falseBranchNd = nd { nodeStmt = Seq (Assume (OpNeg guard)) s2 }
           trueBranch = symbolicExecution n trueBranchNd
           falseBranch = symbolicExecution n falseBranchNd
-      in Branch nd { nodeStmt = Skip, nodeDepth = nodeDepth nd - 1 } trueBranch falseBranch -- Using Skip as placeholder
+      in Branch nd { nodeStmt = Skip, nodeDepth = nodeDepth nd - 1 } <$> trueBranch <*> falseBranch -- Using Skip as placeholder
     While guard body -> symbolicExecution n nd { nodeStmt = IfThenElse guard (Seq body (While guard body)) Skip }
     _ -> error ("Statement type " ++ show (nodeStmt nd) ++ " not handled yet")
 
@@ -99,10 +113,4 @@ assumeStateVar (env, constraint) expr =
 assertStateVar :: SymbolicState -> Expr -> Z3.Z3 Bool
 assertStateVar (env, constraint) expr = do
   let fullExpr = BinopExpr Implication (updateExprVars env expr) constraint
-  z3expr <- exprToZ3 fullExpr
-  Z3.assert z3expr
-  result <- Z3.check
-  case result of
-    Z3.Unsat -> return False
-    Z3.Sat -> return True
-    Z3.Undef -> error "Z3 returned UNKNOWN" 
+  exprIsValid fullExpr

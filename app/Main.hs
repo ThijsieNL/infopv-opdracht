@@ -53,7 +53,6 @@ main = do
         ValidResult tree -> do
           putStrLn "\nSymbolic Execution Tree in Mermaid format:"
           let diagramStr = showMermaid programStmt tree
-          print tree
           putStrLn diagramStr
 
       -- putStrLn "\nDetailed Analysis of WLP Formula with Z3:"

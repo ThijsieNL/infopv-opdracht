@@ -1,8 +1,30 @@
-module Z3Utils (exprToZ3) where
+module Z3Utils where
 
-import Z3.Monad hiding (substitute)
+import Z3.Monad
 import GCLParser.GCLDatatype
 import Algebra
+
+exprIsSat :: Expr -> Z3 Bool
+exprIsSat expr = local $ do
+  z3expr <- exprToZ3 expr
+  assert z3expr
+  result <- check
+  case result of
+    Unsat -> return False
+    Sat -> return True
+    Undef -> error "Z3 returned UNKNOWN"
+  
+exprIsValid :: Expr -> Z3 Bool
+exprIsValid expr = do
+  z3expr <- exprToZ3 expr
+  notExpr <- mkNot z3expr
+  assert notExpr
+  result <- check
+  case result of
+    Unsat -> return True
+    Sat -> return False
+    Undef -> error "Z3 returned UNKNOWN"
+
 
 exprToZ3 :: Expr -> Z3 AST
 exprToZ3 = foldExpr exprToZ3Algebra
