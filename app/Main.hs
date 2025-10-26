@@ -39,9 +39,6 @@ main = do
   parseGCLfile gclFile >>= \case
     Left err -> putStrLn $ "Error parsing GCL file: " ++ err
     Right program -> do
-      putStrLn "Parsed GCL Program:"
-      print program
-
       let programStmt = stmt program
       putStrLn "\nOriginal Statement:"
       print programStmt
@@ -54,16 +51,10 @@ main = do
           putStrLn "\nSymbolic Execution Tree in Mermaid format:"
           let diagramStr = showMermaid programStmt tree
           putStrLn diagramStr
-
-      -- putStrLn "\nDetailed Analysis of WLP Formula with Z3:"
-      -- let programTree = createSymbolicTree n programStmt
-      -- let diagramStr = showMermaid programTree
-      -- putStrLn diagramStr
-
-      -- putStrLn "\nPruned Symbolic Execution Tree in Mermaid format:"
-      -- prunedTree <- evalZ3 $ pruneSymbolicTree programTree
-      -- let prunedDiagramStr = showMermaid prunedTree
-      -- putStrLn prunedDiagramStr
+        InvalidResult tree -> do
+          putStrLn "\nSymbolic Execution Tree (with Invalid Paths) in Mermaid format:"
+          let diagramStr = showMermaid programStmt tree
+          putStrLn diagramStr
 
       {-
       TODO: turn the last assert to assert implies the symbolic state, If that holds, then the path is valid, we skip the WLP calculation.

@@ -7,7 +7,7 @@ import WLP
 import Z3.Monad hiding (substitute)
 import Z3Utils
 import DataTypes
-import SymbolicExecution ( createSymbolicTree, createInitialState )
+import SymbolicExecution ( createSymbolicTree, createInitialState, isTreeInvalid )
 
 analyzeExpr :: Expr -> IO ()
 analyzeExpr expr = evalZ3 $ do
@@ -29,4 +29,6 @@ analyzeExpr expr = evalZ3 $ do
 analyzeProgram :: Int -> Stmt -> IO AnalysisResult
 analyzeProgram n stmt = do
     tree <- createSymbolicTree n stmt
-    return $ ValidResult tree
+    return $ if isTreeInvalid tree
+      then InvalidResult tree
+      else ValidResult tree 

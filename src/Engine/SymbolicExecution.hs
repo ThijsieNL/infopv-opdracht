@@ -1,26 +1,27 @@
-module SymbolicExecution (createSymbolicTree, createInitialState) where
+module SymbolicExecution where
 
-import qualified Data.Map as M
-import GCLParser.GCLDatatype
-import DataTypes
 import Algebra
-import WLP (substitute, reduceExpr)
-import qualified Z3.Monad as Z3
-import Z3Utils (exprToZ3, exprIsSat, exprIsValid)
+import qualified Data.Map as M
 import Data.Map.Internal.Debug (node)
+import DataTypes
+import GCLParser.GCLDatatype
+import WLP (reduceExpr, substitute)
+import qualified Z3.Monad as Z3
+import Z3Utils (exprIsSat, exprIsValid, exprToZ3)
 
 -- | Create a symbolic execution tree for a given statement up to a maximum depth
 createSymbolicTree :: Int -> Stmt -> IO SymbolicTree
 createSymbolicTree maxDepth stmt = pruneSkipBranches <$> symbolicExecution maxDepth initialNode
   where
     initialState = createInitialState stmt
-    initialNode = NodeData
-      { nodeDepth = 1,
-        nodeStmt = stmt,
-        nodeState = initialState,
-        nodeValidity = Valid,
-        nodeFeasibility = True
-      }
+    initialNode =
+      NodeData
+        { nodeDepth = 1,
+          nodeStmt = stmt,
+          nodeState = initialState,
+          nodeValidity = Valid,
+          nodeFeasibility = True
+        }
 
     pruneSkipBranches :: SymbolicTree -> SymbolicTree
     pruneSkipBranches (Branch nd l r) = Branch nd (pruneSkipBranches l) (pruneSkipBranches r)
@@ -30,41 +31,67 @@ createSymbolicTree maxDepth stmt = pruneSkipBranches <$> symbolicExecution maxDe
 
 -- | Create a symbolic execution tree for a given statement up to a maximum depth
 symbolicExecution :: Int -> NodeData -> IO SymbolicTree
-symbolicExecution n nd | nodeDepth nd >= n = return $ Leaf nd { nodeValidity = Invalid "Max depth reached" } -- Stop execution when depth exceeds max depth
+symbolicExecution n nd | nodeDepth nd >= n = return $ Leaf nd {nodeFeasibility = False} -- Stop execution when depth exceeds max depth
 symbolicExecution n nd = case nodeStmt nd of
-    Skip -> return $ Leaf nd -- No further execution
-    Assign var expr -> return $ Leaf nd { nodeState = updateStateVar (nodeState nd) var expr }
-    Assume expr -> return $ Leaf nd { nodeState = assumeStateVar (nodeState nd) expr }
-    Assert expr -> do
-      let fullExpr = BinopExpr Implication (reduceExpr $ updateExprVars (fst $ nodeState nd) expr) (reduceExpr $ snd $ nodeState nd)
-      let validityCheck = Z3.evalZ3 $ assertStateVar (nodeState nd) expr
-      do
-        isValid <- validityCheck
-        print ("Checking assertion: " ++ show fullExpr ++ " => " ++ show isValid)
-        let validity = if isValid then Valid else error "Assertion failed"
-        return $ Leaf nd { nodeValidity = validity }
+  Skip -> return $ Leaf nd -- No further execution
+  Assign var expr -> return $ Leaf nd {nodeState = updateStateVar (nodeState nd) var expr}
+  Assume expr -> return $ Leaf nd {nodeState = assumeStateVar (nodeState nd) expr}
+  Assert expr -> do
+    (isValid, mModel) <- Z3.evalZ3 $ assertStateVar (nodeState nd) expr
+    case (isValid, mModel) of
+      (True, _) -> return $ Leaf nd {nodeValidity = Valid}
+      (False, Just m) -> do
+        modelStr <- Z3.evalZ3 (Z3.modelToString m)
+        return $ Leaf nd {nodeValidity = Invalid modelStr}
+      (False, Nothing) ->
+        return $ Leaf nd {nodeValidity = Invalid "No model available"}
+  Seq s1 s2 -> do
+    firstNode <- symbolicExecution n nd {nodeStmt = s1}
 
-    Seq s1 s2 ->
-      let firstNode = symbolicExecution n nd { nodeStmt = s1 }
-          executeOnChildren :: SymbolicTree -> IO SymbolicTree
-          executeOnChildren t = case t of
-            Leaf childNd
-              | nodeDepth childNd < n -> do
-                  let secondNodeNd = childNd { nodeStmt = s2, nodeDepth = nodeDepth childNd + 1 }
-                  secondNode <- symbolicExecution n secondNodeNd
-                  return $ Sequence childNd secondNode
-              | otherwise -> return $ Leaf childNd
-            Sequence childNd st -> Sequence childNd <$> executeOnChildren st
-            Branch childNd l r -> Branch childNd <$> executeOnChildren l <*> executeOnChildren r
-        in firstNode >>= executeOnChildren
-    IfThenElse guard s1 s2 ->
-      let trueBranchNd = nd { nodeStmt = Seq (Assume guard) s1 }
-          falseBranchNd = nd { nodeStmt = Seq (Assume (OpNeg guard)) s2 }
-          trueBranch = symbolicExecution n trueBranchNd
-          falseBranch = symbolicExecution n falseBranchNd
-      in Branch nd { nodeStmt = Skip, nodeDepth = nodeDepth nd - 1 } <$> trueBranch <*> falseBranch -- Using Skip as placeholder
-    While guard body -> symbolicExecution n nd { nodeStmt = IfThenElse guard (Seq body (While guard body)) Skip }
-    _ -> error ("Statement type " ++ show (nodeStmt nd) ++ " not handled yet")
+    let shouldContinue nd' =
+          nodeDepth nd' < n && isValid (nodeValidity nd') && nodeFeasibility nd'
+
+        go :: SymbolicTree -> IO SymbolicTree
+        go (Leaf childNd)
+          | shouldContinue childNd = do
+              let secondNd = childNd {nodeStmt = s2, nodeDepth = nodeDepth childNd + 1}
+              secondNode <- symbolicExecution n secondNd
+              return $ Sequence childNd secondNode
+          | otherwise = return $ Leaf childNd
+        go (Sequence childNd st)
+          | shouldContinue childNd = Sequence childNd <$> go st
+          | otherwise = return $ Sequence childNd st
+        go (Branch childNd l r)
+          | shouldContinue childNd = Branch childNd <$> go l <*> go r
+          | otherwise = return $ Branch childNd l r
+
+    if not (isPathFeasible firstNode)
+      then return firstNode
+      else go firstNode
+  IfThenElse guard s1 s2 -> do
+    let (env, pathConstraint) = nodeState nd
+        gTrue = updateExprVars env guard
+        gFalse = updateExprVars env (OpNeg guard)
+        trueCon = BinopExpr And gTrue pathConstraint
+        falseCon = BinopExpr And gFalse pathConstraint
+
+    -- TODO: Use heuristics to prioritize branches
+    trueSat <- Z3.evalZ3 $ exprIsSat trueCon
+    falseSat <- Z3.evalZ3 $ exprIsSat falseCon
+
+    trueBranch <-
+      if trueSat
+        then symbolicExecution n nd {nodeStmt = Seq (Assume guard) s1}
+        else symbolicExecution n nd {nodeStmt = Assume guard, nodeFeasibility = False}
+
+    falseBranch <-
+      if falseSat
+        then symbolicExecution n nd {nodeStmt = Seq (Assume (OpNeg guard)) s2}
+        else symbolicExecution n nd {nodeStmt = Assume (OpNeg guard), nodeFeasibility = False}
+
+    return $ Branch nd trueBranch falseBranch
+  While guard body -> symbolicExecution n nd {nodeStmt = IfThenElse guard (Seq body (While guard body)) Skip}
+  _ -> error ("Statement type " ++ show (nodeStmt nd) ++ " not handled yet")
 
 -- | Create the initial symbolic environment for a given statement
 createInitialState :: Stmt -> SymbolicState
@@ -92,6 +119,11 @@ isPathFeasible (Branch nd l r) = isValid (nodeValidity nd) && (isPathFeasible l 
 isPathFeasible (Sequence nd n) = isValid (nodeValidity nd) && isPathFeasible n
 isPathFeasible (Leaf nd) = isValid (nodeValidity nd)
 
+isTreeInvalid :: SymbolicTree -> Bool
+isTreeInvalid (Branch nd l r) = not (isValid (nodeValidity nd)) || isTreeInvalid l || isTreeInvalid r
+isTreeInvalid (Sequence nd n) = not (isValid (nodeValidity nd)) || isTreeInvalid n
+isTreeInvalid (Leaf nd) = not (isValid (nodeValidity nd))
+
 -- | Function to update the symbolic state with a new assignment
 updateStateVar :: SymbolicState -> String -> Expr -> SymbolicState
 updateStateVar (env, constraint) var expr =
@@ -110,7 +142,7 @@ assumeStateVar (env, constraint) expr =
    in (env, newConstraint)
 
 -- | Function to assert a condition in the symbolic state
-assertStateVar :: SymbolicState -> Expr -> Z3.Z3 Bool
+assertStateVar :: SymbolicState -> Expr -> Z3.Z3 (Bool, Maybe Z3.Model)
 assertStateVar (env, constraint) expr = do
   let fullExpr = BinopExpr Implication (updateExprVars env expr) constraint
   exprIsValid fullExpr

@@ -16,14 +16,14 @@ showMermaid stmt root = unlines $ "stateDiagram-v2" : indent (origin ++ nodeLine
         indent = map ("  " ++)
         nodeData = getNodeData root
         initialState = createInitialState stmt
-        origin = ["0 : " ++ showSymbolicState initialState, "0 --> " ++ show (uniqueId root) ++ ": " ++ sanitizeStmt (nodeStmt nodeData)]
+        origin = ["0 : " ++ showSymbolicState initialState ++ "0", "0 --> " ++ show (uniqueId root) ++ ": " ++ sanitizeStmt (nodeStmt nodeData)]
 
 -- | Convert a SymbolicTree to a list of lines describing nodes and transitions
 nodeLines :: SymbolicTree -> [String]
 nodeLines = go
   where
     -- common function to generate a label for a node
-    nodeLabel nd = showSymbolicState (nodeState nd) ++ " " ++ show (nodeDepth nd)
+    nodeLabel nd = showSymbolicState (nodeState nd) ++ showValidity (nodeValidity nd) (nodeFeasibility nd) ++ show (nodeDepth nd) 
 
     -- common function to generate the node's line
     nodeLine constructor = show (uniqueId constructor) ++ " : " ++ nodeLabel (getNodeData constructor)
@@ -31,8 +31,11 @@ nodeLines = go
     -- common function to generate a transition line
     transitionLine from to = show (uniqueId from) ++ " --> " ++ show (uniqueId to) ++ " : " ++ sanitizeStmt (nodeStmt (getNodeData to))
 
-    go (Leaf nd) | nodeValidity nd == Valid = [nodeLine (Leaf nd), show (uniqueId (Leaf nd)) ++ " --> [*]"]
-                 | otherwise = [nodeLine (Leaf nd)]
+    showValidity Valid False = " [INFEASIBLE]<br>"
+    showValidity (Invalid reason) _ = " [INVALID#58; " ++ filter (`notElem` "\r\n") reason ++ "]<br>"
+    showValidity _ _ = ""
+
+    go (Leaf nd) = [nodeLine (Leaf nd)]
     go (Sequence nd st) =
         let thisNode = nodeLine (Sequence nd st)
             trans = [transitionLine (Sequence nd st) st]
@@ -56,4 +59,4 @@ sanitizeStmt = concatMap replaceColon . show
 
 -- | Show a symbolic state as a string
 showSymbolicState :: SymbolicState -> String
-showSymbolicState (env, constraint) = "(" ++ intercalate ", " [k ++ " -> " ++ show (reduceExpr v) | (k, v) <- M.toList env] ++ ", " ++ show (reduceExpr constraint) ++ ")"
+showSymbolicState (env, constraint) = "s=(" ++ intercalate ", " [k ++ " -> " ++ show (reduceExpr v) | (k, v) <- M.toList env] ++ ")<br>C=(" ++ show (reduceExpr constraint) ++ ")<br>"

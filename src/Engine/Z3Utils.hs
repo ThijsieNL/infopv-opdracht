@@ -13,16 +13,19 @@ exprIsSat expr = local $ do
     Unsat -> return False
     Sat -> return True
     Undef -> error "Z3 returned UNKNOWN"
-  
-exprIsValid :: Expr -> Z3 Bool
-exprIsValid expr = do
+
+exprIsValid :: Expr -> Z3 (Bool, Maybe Model)
+exprIsValid expr = local $ do
   z3expr <- exprToZ3 expr
   notExpr <- mkNot z3expr
   assert notExpr
   result <- check
   case result of
-    Unsat -> return True
-    Sat -> return False
+    Unsat -> return (True, Nothing)
+    Sat -> do
+      m <- getModel
+      let model = snd m
+      return (False, model)
     Undef -> error "Z3 returned UNKNOWN"
 
 
