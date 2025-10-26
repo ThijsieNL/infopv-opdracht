@@ -1,4 +1,4 @@
-module WLP where
+module WLP (reduceExpr, substitute) where
 
 import Algebra
 import GCLParser.GCLDatatype

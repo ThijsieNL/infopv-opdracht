@@ -1,21 +1,31 @@
-module Z3Utils where
+{-# LANGUAGE LambdaCase #-}
+module Z3Utils(exprIsSat, exprIsSatWithModel, exprIsValid, exprIsValidWithModel) where
 
 import Z3.Monad
 import GCLParser.GCLDatatype
 import Algebra
 
 exprIsSat :: Expr -> Z3 Bool
-exprIsSat expr = local $ do
+exprIsSat = fmap ((== Sat) . fst) . exprIsSatWithModel
+
+exprIsSatWithModel :: Expr -> Z3 (Result, Maybe Model)
+exprIsSatWithModel expr = local $ do
   z3expr <- exprToZ3 expr
   assert z3expr
   result <- check
-  case result of
-    Unsat -> return False
-    Sat -> return True
-    Undef -> error "Z3 returned UNKNOWN"
+  getModel
 
-exprIsValid :: Expr -> Z3 (Bool, Maybe Model)
-exprIsValid expr = local $ do
+exprIsValidWithModel :: Expr -> Z3 (Bool, Maybe Model)
+exprIsValidWithModel expr = exprIsSatWithModel (OpNeg expr) >>= \case
+  (Unsat, _) -> return (True, Nothing)
+  (Sat, m)   -> return (False, m)
+  (Undef, _) -> error "Z3 returned UNKNOWN"
+
+exprIsValid :: Expr -> Z3 Bool
+exprIsValid = fmap fst . exprIsValidWithModel
+
+exprIsValidOld :: Expr -> Z3 (Bool, Maybe Model)
+exprIsValidOld expr = local $ do
   z3expr <- exprToZ3 expr
   notExpr <- mkNot z3expr
   assert notExpr

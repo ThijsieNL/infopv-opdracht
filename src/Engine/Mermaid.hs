@@ -5,7 +5,6 @@ import Data.List (intercalate)
 import qualified Data.Map as M
 import GCLParser.GCLDatatype hiding (stmt)
 import DataTypes
-import Tree
 import WLP (reduceExpr)
 import SymbolicExecution
 
@@ -59,4 +58,4 @@ sanitizeStmt = concatMap replaceColon . show
 
 -- | Show a symbolic state as a string
 showSymbolicState :: SymbolicState -> String
-showSymbolicState (env, constraint) = "s=(" ++ intercalate ", " [k ++ " -> " ++ show (reduceExpr v) | (k, v) <- M.toList env] ++ ")<br>C=(" ++ show (reduceExpr constraint) ++ ")<br>"
+showSymbolicState (env, constraint) = "(" ++ intercalate ", " [k ++ " -> " ++ show (reduceExpr v) | (k, v) <- M.toList env] ++ ")<br>(" ++ show (reduceExpr constraint) ++ ")<br>"

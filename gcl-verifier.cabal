@@ -36,8 +36,7 @@ library engine
   exposed-modules:   Verifier
                      , DataTypes
                      , Mermaid
-  other-modules:     Tree
-                     , SymbolicExecution
+  other-modules:     SymbolicExecution
                      , WLP
                      , Z3Utils 
   build-depends:     base   >= 4.10
