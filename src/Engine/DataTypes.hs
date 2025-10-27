@@ -7,19 +7,22 @@ type SymEnv = M.Map String Expr
 
 type SymbolicState = (SymEnv, Expr) -- (Environment, Path Constraint)
 
-data Validity = Valid | Invalid String -- Valid or Invalid with reason
+data Validity = Valid | Invalid String | Infeasible String -- Valid or Invalid and Infeasible with reason
     deriving (Show, Eq)
 
 isValid :: Validity -> Bool
-isValid Valid = True
 isValid (Invalid _) = False
+isValid _ = True
+
+isFeasible :: Validity -> Bool
+isFeasible (Infeasible _) = False
+isFeasible _ = True
 
 data NodeData = NodeData
   { nodeDepth :: Int,
     nodeStmt :: Stmt,
     nodeState :: SymbolicState,
-    nodeValidity :: Validity,
-    nodeFeasibility :: Bool
+    nodeValidity :: Validity
   }
   deriving (Show)
 

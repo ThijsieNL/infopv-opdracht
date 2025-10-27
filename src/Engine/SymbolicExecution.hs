@@ -32,8 +32,7 @@ createSymbolicTree maxDepth stmt = pruneSkipBranches <$> symbolicExecution maxDe
         { nodeDepth = 1,
           nodeStmt = stmt,
           nodeState = initialState,
-          nodeValidity = Valid,
-          nodeFeasibility = True
+          nodeValidity = Valid
         }
 
     pruneSkipBranches :: SymbolicTree -> SymbolicTree
@@ -44,7 +43,7 @@ createSymbolicTree maxDepth stmt = pruneSkipBranches <$> symbolicExecution maxDe
 
 -- | Create a symbolic execution tree for a given statement up to a maximum depth
 symbolicExecution :: Int -> NodeData -> IO SymbolicTree
-symbolicExecution n nd | nodeDepth nd >= n = return $ Leaf nd {nodeFeasibility = False} -- Stop execution when depth exceeds max depth
+symbolicExecution n nd | nodeDepth nd >= n = return $ Leaf nd {nodeValidity = Infeasible "Max depth reached"} -- Stop execution when depth exceeds max depth
 symbolicExecution n nd = case nodeStmt nd of
   Skip -> return $ Leaf nd -- No further execution
   Assign var expr -> return $ Leaf nd {nodeState = updateStateVar (nodeState nd) var expr}
@@ -65,7 +64,7 @@ symbolicExecution n nd = case nodeStmt nd of
     firstNode <- symbolicExecution n nd {nodeStmt = s1}
 
     let shouldContinue nd' =
-          nodeDepth nd' < n && isValid (nodeValidity nd') && nodeFeasibility nd'
+          nodeDepth nd' < n && isValid (nodeValidity nd') && isFeasible (nodeValidity nd')
 
         go :: SymbolicTree -> IO SymbolicTree
         go (Leaf childNd)
@@ -98,12 +97,12 @@ symbolicExecution n nd = case nodeStmt nd of
     trueBranch <-
       if trueSat
         then symbolicExecution n nd {nodeStmt = Seq (Assume guard) s1}
-        else symbolicExecution n nd {nodeStmt = Assume guard, nodeFeasibility = False}
+        else symbolicExecution n nd {nodeStmt = Assume guard, nodeValidity = Infeasible "Guard is not satisfiable"}
 
     falseBranch <-
       if falseSat
         then symbolicExecution n nd {nodeStmt = Seq (Assume (OpNeg guard)) s2}
-        else symbolicExecution n nd {nodeStmt = Assume (OpNeg guard), nodeFeasibility = False}
+        else symbolicExecution n nd {nodeStmt = Assume (OpNeg guard), nodeValidity = Infeasible "Guard is not satisfiable"}
 
     -- TODO: Check validity of branches
 

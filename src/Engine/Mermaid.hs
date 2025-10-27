@@ -22,7 +22,7 @@ nodeLines :: SymbolicTree -> [String]
 nodeLines = go
   where
     -- common function to generate a label for a node
-    nodeLabel nd = showSymbolicState (nodeState nd) ++ showValidity (nodeValidity nd) (nodeFeasibility nd) ++ show (nodeDepth nd) 
+    nodeLabel nd = showSymbolicState (nodeState nd) ++ showValidity (nodeValidity nd) ++ show (nodeDepth nd)
 
     -- common function to generate the node's line
     nodeLine constructor = show (uniqueId constructor) ++ " : " ++ nodeLabel (getNodeData constructor)
@@ -30,9 +30,9 @@ nodeLines = go
     -- common function to generate a transition line
     transitionLine from to = show (uniqueId from) ++ " --> " ++ show (uniqueId to) ++ " : " ++ sanitizeStmt (nodeStmt (getNodeData to))
 
-    showValidity Valid False = " [INFEASIBLE]<br>"
-    showValidity (Invalid reason) _ = " [INVALID#58; " ++ filter (`notElem` "\r\n") reason ++ "]<br>"
-    showValidity _ _ = ""
+    showValidity (Infeasible reason) = " [INFEASIBLE#58; " ++ filter (`notElem` "\r\n") reason ++ "]<br>"
+    showValidity (Invalid reason) = " [INVALID#58; " ++ filter (`notElem` "\r\n") reason ++ "]<br>"
+    showValidity _ = ""
 
     go (Leaf nd) = [nodeLine (Leaf nd)]
     go (Sequence nd st) =
