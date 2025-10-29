@@ -44,7 +44,7 @@ main = do
       print programStmt
 
       putStrLn "\nAnalyzing Program with Bounded Model Checking:"
-      analysisResult <- analyzeProgram n programStmt
+      analysisResult <- analyzeProgram (VerifierOptions { verbose = False, maxDepth = n }) program
 
       case analysisResult of
         ValidResult tree -> do

@@ -44,6 +44,7 @@ library engine
                      , z3
                      , containers
                      , hashable
+                     , mtl
   -- location to z3 bin and lib:
   extra-lib-dirs:      /usr/lib/x86_64-linux-gnu
 

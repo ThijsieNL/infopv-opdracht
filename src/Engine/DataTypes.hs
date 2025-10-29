@@ -3,7 +3,18 @@ module DataTypes where
 import qualified Data.Map as M
 import GCLParser.GCLDatatype
 
+data VerifierOptions = VerifierOptions
+  { verbose :: Bool,
+    maxDepth :: Int
+  }
+
 type SymEnv = M.Map String Expr
+
+createSymEnv :: Program -> SymEnv
+createSymEnv program = M.fromList $ map createEntry decls
+  where
+    decls = input program ++ output program
+    createEntry (VarDeclaration var _) = (var, Var (var ++ "0"))
 
 type SymbolicState = (SymEnv, Expr) -- (Environment, Path Constraint)
 
