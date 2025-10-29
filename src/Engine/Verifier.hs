@@ -1,20 +1,10 @@
-module Verifier (analyzeProgramOld, analyzeProgram) where
+module Verifier (analyzeProgram) where
 
-import Control.Monad.IO.Class
 import GCLParser.GCLDatatype
-import WLP
 import Z3.Monad hiding (substitute)
-import Z3Utils
 import DataTypes
-import SymbolicExecution ( createSymbolicTree, createInitialState, isTreeInvalid, symbolicExecution)
-import Control.Monad.Reader (ReaderT(runReaderT))
-
-analyzeProgramOld :: Int -> Stmt -> IO AnalysisResult
-analyzeProgramOld n stmt = do
-    tree <- createSymbolicTree n stmt
-    return $ if isTreeInvalid tree
-      then InvalidResult tree
-      else ValidResult tree
+import SymbolicExecution
+import Control.Monad.Reader
 
 analyzeProgram :: VerifierOptions -> Program -> IO AnalysisResult
 analyzeProgram opts program = do

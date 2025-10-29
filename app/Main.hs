@@ -1,13 +1,14 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
+
 module Main (main) where
 
-import Options.Applicative as Opt
-import GCLParser.Parser
-import Verifier
-import GCLParser.GCLDatatype
 import DataTypes
+import GCLParser.GCLDatatype
+import GCLParser.Parser
 import Mermaid
+import Options.Applicative as Opt
+import Verifier ( analyzeProgram )
 
 data Options = Options
   { gclFile :: FilePath,
@@ -44,19 +45,14 @@ main = do
       print programStmt
 
       putStrLn "\nAnalyzing Program with Bounded Model Checking:"
-      analysisResult <- analyzeProgram (VerifierOptions { verbose = False, maxDepth = n }) program
+      analysisResult <- analyzeProgram (VerifierOptions {verbose = False, maxDepth = n}) program
 
       case analysisResult of
         ValidResult tree -> do
           putStrLn "\nSymbolic Execution Tree in Mermaid format:"
-          let diagramStr = showMermaid programStmt tree
+          let diagramStr = showMermaid program tree
           putStrLn diagramStr
         InvalidResult tree -> do
           putStrLn "\nSymbolic Execution Tree (with Invalid Paths) in Mermaid format:"
-          let diagramStr = showMermaid programStmt tree
+          let diagramStr = showMermaid program tree
           putStrLn diagramStr
-
-      {-
-      TODO: turn the last assert to assert implies the symbolic state, If that holds, then the path is valid, we skip the WLP calculation.
-      Check invalid paths, and track those that lead to assertion failures.
-      -}

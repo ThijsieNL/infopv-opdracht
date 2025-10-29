@@ -1,20 +1,18 @@
 module Mermaid (showMermaid) where
 
-import Data.Hashable (hash)
-import Data.List (intercalate)
+import Data.Hashable
+import Data.List
 import qualified Data.Map as M
 import GCLParser.GCLDatatype hiding (stmt)
 import DataTypes
-import WLP (reduceExpr)
-import SymbolicExecution
+import WLP
 
-
-showMermaid :: Stmt -> SymbolicTree -> String
-showMermaid stmt root = unlines $ "stateDiagram-v2" : indent (origin ++ nodeLines root)
+showMermaid :: Program -> SymbolicTree -> String
+showMermaid program root = unlines $ "stateDiagram-v2" : indent (origin ++ nodeLines root)
     where
         indent = map ("  " ++)
         nodeData = getNodeData root
-        initialState = createInitialState stmt
+        initialState = (createSymEnv program, LitB True)
         origin = ["0 : " ++ showSymbolicState initialState ++ "0", "0 --> " ++ show (uniqueId root) ++ ": " ++ sanitizeStmt (nodeStmt nodeData)]
 
 -- | Convert a SymbolicTree to a list of lines describing nodes and transitions
