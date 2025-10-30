@@ -50,7 +50,7 @@ symbolicExecution nd = do
               | shouldContinue childNd = Branch childNd <$> go l <*> go r
               | otherwise = return $ Branch childNd l r
 
-        if not (isPathFeasible firstNode)
+        if not (isTreeFeasible firstNode)
           then return firstNode
           else go firstNode
       IfThenElse guard s1 s2 -> do
@@ -69,7 +69,7 @@ symbolicExecution nd = do
             else symbolicExecution nd {nodeStmt = Assume guard, nodeValidity = Infeasible "Guard is not satisfiable"}
 
         falseBranch <-
-          if falseSat
+          if not trueSat || falseSat
             then symbolicExecution nd {nodeStmt = Seq (Assume (OpNeg guard)) s2}
             else symbolicExecution nd {nodeStmt = Assume (OpNeg guard), nodeValidity = Infeasible "Guard is not satisfiable"}
 
@@ -77,11 +77,13 @@ symbolicExecution nd = do
       While guard body -> symbolicExecution nd {nodeStmt = IfThenElse guard (Seq body (While guard body)) Skip}
       _ -> error ("Statement type " ++ show (nodeStmt nd) ++ " not handled yet")
 
-isPathFeasible :: SymbolicTree -> Bool
-isPathFeasible (Branch nd l r) = isValid (nodeValidity nd) && (isPathFeasible l || isPathFeasible r)
-isPathFeasible (Sequence nd n) = isValid (nodeValidity nd) && isPathFeasible n
-isPathFeasible (Leaf nd) = isValid (nodeValidity nd)
+-- | Check if the symbolic execution tree contains any feasible valid paths
+isTreeFeasible :: SymbolicTree -> Bool
+isTreeFeasible (Branch nd l r) = isValid (nodeValidity nd) && (isTreeFeasible l || isTreeFeasible r)
+isTreeFeasible (Sequence nd n) = isValid (nodeValidity nd) && isTreeFeasible n
+isTreeFeasible (Leaf nd) = isValid (nodeValidity nd)
 
+-- | Check if the symbolic execution tree contains any invalid paths
 isTreeInvalid :: SymbolicTree -> Bool
 isTreeInvalid (Branch nd l r) = not (isValid (nodeValidity nd)) || isTreeInvalid l || isTreeInvalid r
 isTreeInvalid (Sequence nd n) = not (isValid (nodeValidity nd)) || isTreeInvalid n

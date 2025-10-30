@@ -8,6 +8,11 @@ data VerifierOptions = VerifierOptions
     maxDepth :: Int
   }
 
+data VerifierReport = VerifierReport
+  { totalZ3Calls :: Int
+  }
+  deriving (Show)
+
 type SymEnv = M.Map String Expr
 
 createSymEnv :: Program -> SymEnv
@@ -37,9 +42,16 @@ data NodeData = NodeData
   }
   deriving (Show)
 
-data AnalysisResult = ValidResult SymbolicTree | InvalidResult SymbolicTree
+
+data AnalysisResult = AnalysisResult {
+    symbolicTree :: SymbolicTree,
+    isValidResult :: Bool,
+    z3Invocations :: Int
+} 
     deriving (Show)
 
+
+-- TODO: If we remove the nd on the branch we can skip pruning these nd's
 data SymbolicTree = Branch NodeData SymbolicTree SymbolicTree | Sequence NodeData SymbolicTree | Leaf NodeData
     deriving (Show)
 

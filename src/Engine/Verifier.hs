@@ -19,9 +19,11 @@ analyzeProgram opts program = do
 
     let reducedTree = pruneSkipBranches tree
 
-    return $ if isTreeInvalid reducedTree
-      then InvalidResult reducedTree
-      else ValidResult reducedTree
+    return $ AnalysisResult
+      { symbolicTree = reducedTree
+      , isValidResult = isTreeInvalid reducedTree 
+      , z3Invocations = 0 -- TODO: Track Z3 invocations 
+      }
     
 -- | Prune the skip placeholder nodes from the symbolic execution tree 
 pruneSkipBranches :: SymbolicTree -> SymbolicTree

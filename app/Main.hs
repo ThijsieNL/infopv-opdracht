@@ -8,11 +8,13 @@ import GCLParser.GCLDatatype
 import GCLParser.Parser
 import Mermaid
 import Options.Applicative as Opt
-import Verifier ( analyzeProgram )
+import Verifier (analyzeProgram)
+import Control.Monad
 
 data Options = Options
   { gclFile :: FilePath,
-    n :: Int
+    k :: Int,
+    showTree :: Bool
   }
   deriving (Show)
 
@@ -26,10 +28,15 @@ opts =
       )
     <*> option
       auto
-      ( short 'n'
+      ( short 'k'
           <> metavar "NUM"
           <> help "The maximum program execution depth"
           <> value 10
+          <> showDefault
+      )
+    <*> switch
+      ( long "show-tree"
+          <> help "Show the symbolic execution tree"
           <> showDefault
       )
 
@@ -45,14 +52,10 @@ main = do
       print programStmt
 
       putStrLn "\nAnalyzing Program with Bounded Model Checking:"
-      analysisResult <- analyzeProgram (VerifierOptions {verbose = False, maxDepth = n}) program
+      AnalysisResult {..} <- analyzeProgram (VerifierOptions {verbose = False, maxDepth = k}) program
 
-      case analysisResult of
-        ValidResult tree -> do
-          putStrLn "\nSymbolic Execution Tree in Mermaid format:"
-          let diagramStr = showMermaid program tree
-          putStrLn diagramStr
-        InvalidResult tree -> do
-          putStrLn "\nSymbolic Execution Tree (with Invalid Paths) in Mermaid format:"
-          let diagramStr = showMermaid program tree
-          putStrLn diagramStr
+      if isValidResult
+        then putStrLn "\nThe program is VALID within the given bounds."
+        else putStrLn "\nThe program is INVALID within the given bounds."
+
+      when showTree $ putStrLn $ showMermaid program symbolicTree
