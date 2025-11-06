@@ -8,7 +8,7 @@ import GCLParser.GCLDatatype
 import GCLParser.Parser
 import Mermaid
 import Options.Applicative as Opt
-import Verifier (analyzeProgram)
+import Verifier
 import Control.Monad
 
 data Options = Options

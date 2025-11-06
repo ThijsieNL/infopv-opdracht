@@ -21,7 +21,7 @@ analyzeProgram opts program = do
 
     return $ AnalysisResult
       { symbolicTree = reducedTree
-      , isValidResult = isTreeInvalid reducedTree 
+      , isValidResult = not $ isTreeInvalid reducedTree
       , z3Invocations = 0 -- TODO: Track Z3 invocations 
       }
     

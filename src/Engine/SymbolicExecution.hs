@@ -1,6 +1,5 @@
 module SymbolicExecution where
 
-import Algebra
 import Control.Monad.Reader
 import qualified Data.Map as M
 import DataTypes
@@ -8,6 +7,7 @@ import GCLParser.GCLDatatype
 import WLP
 import Z3.Monad hiding (substitute)
 import Z3Utils 
+import Control.Monad.RWS (MonadState(state))
 
 -- TODO: Writer for reporting?
 type SymbolicExecution = ReaderT VerifierOptions Z3
@@ -33,13 +33,29 @@ symbolicExecution nd = do
           (False, Nothing) -> return $ Leaf nd {nodeValidity = Invalid "No model available"}
       Seq s1 s2 -> do
         firstNode <- symbolicExecution nd {nodeStmt = s1}
+
+        -- If firstNode is a Block vars body, we need to remove the vars from the symbolic state before continuing 
+        let isBlock = case s1 of
+              Block _ _ -> True
+              _         -> False 
+
         let shouldContinue nd' =
               nodeDepth nd' < md && isValid (nodeValidity nd') && isFeasible (nodeValidity nd')
 
             go :: SymbolicTree -> SymbolicExecution SymbolicTree
             go (Leaf childNd)
               | shouldContinue childNd = do
-                  let secondNd = childNd {nodeStmt = s2, nodeDepth = nodeDepth childNd + 1}
+                  let secondState =
+                        if isBlock
+                          then
+                            let (symEnv, pathConstraint) = nodeState childNd
+                                s1Vars = case s1 of
+                                  Block vars _ -> map (\(VarDeclaration v _) -> v) vars
+                                  _            -> []
+                                newEnv = foldr M.delete symEnv s1Vars
+                             in (newEnv, pathConstraint)
+                          else nodeState childNd
+                  let secondNd = childNd {nodeStmt = s2, nodeDepth = nodeDepth childNd + 1, nodeState = secondState}
                   secondNode <- symbolicExecution secondNd
                   return $ Sequence childNd secondNode
               | otherwise = return $ Leaf childNd
@@ -75,6 +91,13 @@ symbolicExecution nd = do
 
         return $ Branch nd trueBranch falseBranch
       While guard body -> symbolicExecution nd {nodeStmt = IfThenElse guard (Seq body (While guard body)) Skip}
+      -- TODO: AAssign
+      Block vars body -> do
+        let (symEnv, pathConstraint) = nodeState nd
+        let varNames = map (\(VarDeclaration v _) -> v) vars
+        let newEnv = foldr (\(VarDeclaration var _) acc -> M.insert var (Var (var ++ "0")) acc) symEnv vars
+        let nd' = nd {nodeState = (newEnv, pathConstraint), nodeStmt = body}
+        symbolicExecution nd'
       _ -> error ("Statement type " ++ show (nodeStmt nd) ++ " not handled yet")
 
 -- | Check if the symbolic execution tree contains any feasible valid paths

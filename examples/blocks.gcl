@@ -1,0 +1,9 @@
+blocks(x:int | y:int){
+  var min:int, i:int {
+    min := x - 1 ;
+    y := min
+  } ;
+
+  // assert min > y ; // Invalid because you aren't allowed to access min
+  assert x > y
+}
