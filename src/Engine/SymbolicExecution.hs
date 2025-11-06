@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use tuple-section" #-}
 module SymbolicExecution where
 
 import Control.Monad.Reader
@@ -20,17 +22,20 @@ symbolicExecution nd = do
     else case nodeStmt nd of
       Skip -> return $ Leaf nd
       Assign var expr -> return $ Leaf nd {nodeState = updateStateVar (nodeState nd) var expr}
+      AAssign var e1 e2 -> do 
+        let repby = RepBy (Var var) e1 e2
+        return $ Leaf nd {nodeState = updateStateVar (nodeState nd) ("arr_" ++ var) repby}
       Assume expr -> return $ Leaf nd {nodeState = assumeStateVar (nodeState nd) expr} -- Move checking to this point
       Assert expr -> do
         (isValid', mModel) <- lift $ assertStateVar (nodeState nd) expr
         case (isValid', mModel) of
           (True, _) -> return $ Leaf nd {nodeValidity = Valid}
-          (False, Just m) -> do
+          (False, Just (e, m)) -> do
             modelStr <- lift $ modelToString m
             let (env, constraint) = nodeState nd
                 fullExpr = BinopExpr Implication constraint (updateExprVars env expr)
-            return $ Leaf nd {nodeValidity = Invalid modelStr}
-          (False, Nothing) -> return $ Leaf nd {nodeValidity = Invalid "No model available"}
+            return $ Leaf nd {nodeValidity = Invalid $ show e ++ "<br>(" ++ modelStr ++ ")"}
+          (False, Nothing) -> return $ Leaf nd {nodeValidity = Invalid " No model available"}
       Seq s1 s2 -> do
         firstNode <- symbolicExecution nd {nodeStmt = s1}
 
@@ -91,12 +96,10 @@ symbolicExecution nd = do
 
         return $ Branch nd trueBranch falseBranch
       While guard body -> symbolicExecution nd {nodeStmt = IfThenElse guard (Seq body (While guard body)) Skip}
-      -- TODO: AAssign
       Block vars body -> do
         let (symEnv, pathConstraint) = nodeState nd
-        let varNames = map (\(VarDeclaration v _) -> v) vars
-        let newEnv = foldr (\(VarDeclaration var _) acc -> M.insert var (Var (var ++ "0")) acc) symEnv vars
-        let nd' = nd {nodeState = (newEnv, pathConstraint), nodeStmt = body}
+        let symEnv' = M.union symEnv (mapVarDecls vars)
+        let nd' = nd {nodeState = (symEnv', pathConstraint), nodeStmt = body}
         symbolicExecution nd'
       _ -> error ("Statement type " ++ show (nodeStmt nd) ++ " not handled yet")
 
@@ -130,7 +133,10 @@ assumeStateVar (env, constraint) expr =
    in (env, newConstraint)
 
 -- | Function to assert a condition in the symbolic state
-assertStateVar :: SymbolicState -> Expr -> Z3 (Bool, Maybe Model)
+assertStateVar :: SymbolicState -> Expr -> Z3 (Bool, Maybe (Expr, Model))
 assertStateVar (env, constraint) expr = do
   let fullExpr = BinopExpr Implication constraint (updateExprVars env expr)
-  exprIsValidWithModel fullExpr
+  result <- exprIsValidWithModel fullExpr
+  case result of
+    (True, _) -> return (True, Nothing)
+    (False, mModel) -> return (False, fmap (\m -> (reduceExpr fullExpr, m)) mModel)

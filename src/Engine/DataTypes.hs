@@ -15,11 +15,21 @@ data VerifierReport = VerifierReport
 
 type SymEnv = M.Map String Expr
 
+-- | Create a symbolic environment from a program's variable declarations
 createSymEnv :: Program -> SymEnv
-createSymEnv program = M.fromList $ map createEntry decls
+createSymEnv program = mapVarDecls decls
   where
     decls = input program ++ output program
-    createEntry (VarDeclaration var _) = (var, Var (var ++ "0"))
+
+-- | Create a symbolic environment from a list of variable declarations
+mapVarDecls :: [VarDeclaration] -> SymEnv
+mapVarDecls decls = M.fromList $ concatMap createEntry decls
+  where
+    createEntry (VarDeclaration var (AType _)) =
+      let arrVar = "arr_" ++ var
+          lenVar = "len_" ++ var
+      in [(arrVar, Var (arrVar ++ "0")), (lenVar, Var (lenVar ++ "0"))]
+    createEntry (VarDeclaration var _) = [(var, Var (var ++ "0"))]
 
 type SymbolicState = (SymEnv, Expr) -- (Environment, Path Constraint)
 

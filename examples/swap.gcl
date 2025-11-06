@@ -11,5 +11,6 @@ swap(i:int, j:int | a:[]int) {
       a[i] := a[j] ;
       a[j] := tmp ;
       assert (a[i] = oldjVal) && (a[j] = oldiVal)
-  }
+  } ;
+  assert 0 <= i
 }

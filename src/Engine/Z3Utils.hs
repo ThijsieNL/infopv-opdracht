@@ -4,13 +4,15 @@ module Z3Utils(exprIsSat, exprIsSatWithModel, exprIsValid, exprIsValidWithModel)
 import Z3.Monad
 import GCLParser.GCLDatatype
 import Algebra
+import Debug.Trace
 
 exprIsSat :: Expr -> Z3 Bool
 exprIsSat = fmap ((== Sat) . fst) . exprIsSatWithModel
 
 exprIsSatWithModel :: Expr -> Z3 (Result, Maybe Model)
-exprIsSatWithModel expr = local $ do
+exprIsSatWithModel expr = trace ("Z3 evaluation on: " ++ show expr) $ local $ do
   z3expr <- exprToZ3 expr
+  -- z3expr <- mkBool True -- TODO: Fix translation
   assert z3expr
   result <- check
   getModel
@@ -24,21 +26,6 @@ exprIsValidWithModel expr = exprIsSatWithModel (OpNeg expr) >>= \case
 exprIsValid :: Expr -> Z3 Bool
 exprIsValid = fmap fst . exprIsValidWithModel
 
-exprIsValidOld :: Expr -> Z3 (Bool, Maybe Model)
-exprIsValidOld expr = local $ do
-  z3expr <- exprToZ3 expr
-  notExpr <- mkNot z3expr
-  assert notExpr
-  result <- check
-  case result of
-    Unsat -> return (True, Nothing)
-    Sat -> do
-      m <- getModel
-      let model = snd m
-      return (False, model)
-    Undef -> error "Z3 returned UNKNOWN"
-
-
 exprToZ3 :: Expr -> Z3 AST
 exprToZ3 = foldExpr exprToZ3Algebra
 
@@ -47,7 +34,12 @@ exprToZ3Algebra =
   ExprAlgebra
     { onVar = \v -> do
         sym <- mkStringSymbol v
-        mkIntVar sym,
+        intSort <- mkIntSort
+        if take 4 v == "arr_" then do
+          arrSort <- mkArraySort intSort intSort
+          mkConst sym arrSort
+        else do
+          mkConst sym intSort,
       onLitI = mkInteger . toInteger,
       onLitB = mkBool,
       onLitNull = mkInteger 0, -- Represent null as 0 for simplicity
@@ -70,12 +62,27 @@ exprToZ3Algebra =
           Divide -> mkDiv ast1 ast2
           Alias -> error "Alias operation not supported in Z3 translation",
       onParens = id,
-      onArrayElem = undefined,
-      onForall = undefined,
-      onExists = undefined,
-      onSizeOf = undefined,
-      onRepBy = undefined,
-      onCond = undefined,
-      onNewStore = undefined,
-      onDereference = undefined
+      onArrayElem = \arr idx -> do
+        arrAst <- arr
+        idxAst <- idx
+        mkSelect arrAst idxAst,
+      onForall = \var body -> do 
+        bodyAst <- body
+        intSort <- mkIntSort
+        symbol <- mkStringSymbol var
+        mkForall [] [symbol] [intSort] bodyAst,
+      onExists = \var body -> do 
+        bodyAst <- body
+        intSort <- mkIntSort
+        symbol <- mkStringSymbol var
+        mkExists [] [symbol] [intSort] bodyAst,
+      onSizeOf = id,
+      onRepBy = \arr idx val -> do
+        arrAst <- arr
+        idxAst <- idx
+        valAst <- val
+        mkStore arrAst idxAst valAst,
+      onCond = error "Conditional expressions not supported in Z3 translation",
+      onNewStore = error "NewStore not supported in Z3 translation",
+      onDereference = error "Dereference not supported in Z3 translation"
     }
