@@ -5,7 +5,8 @@ import GCLParser.GCLDatatype
 
 data VerifierOptions = VerifierOptions
   { verbose :: Bool,
-    maxDepth :: Int
+    maxDepth :: Int,
+    prunePercentage :: Maybe Double
   }
 
 data VerifierReport = VerifierReport

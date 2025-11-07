@@ -3,17 +3,18 @@
 
 module Main (main) where
 
+import Control.Monad
 import DataTypes
 import GCLParser.GCLDatatype
 import GCLParser.Parser
 import Mermaid
 import Options.Applicative as Opt
 import Verifier
-import Control.Monad
 
 data Options = Options
   { gclFile :: FilePath,
     k :: Int,
+    prunePercentage :: Maybe Double,
     showTree :: Bool
   }
   deriving (Show)
@@ -34,6 +35,14 @@ opts =
           <> value 10
           <> showDefault
       )
+    <*> option
+      auto
+      ( short 'p'
+          <> metavar "NUM"
+          <> help "The max depth percentage on which pruning is applied (0.0-1.0)"
+          <> value Nothing
+          <> showDefault
+      )
     <*> switch
       ( long "show-tree"
           <> help "Show the symbolic execution tree"
@@ -52,7 +61,7 @@ main = do
       print programStmt
 
       putStrLn "\nAnalyzing Program with Bounded Model Checking:"
-      AnalysisResult {..} <- analyzeProgram (VerifierOptions {verbose = False, maxDepth = k}) program
+      AnalysisResult {..} <- analyzeProgram (VerifierOptions {verbose = False, maxDepth = k, prunePercentage = prunePercentage}) program
 
       if isValidResult
         then putStrLn "\nThe program is VALID within the given bounds."

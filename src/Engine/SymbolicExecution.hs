@@ -1,15 +1,13 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use tuple-section" #-}
 module SymbolicExecution where
 
+import Control.Monad.RWS (MonadState (state))
 import Control.Monad.Reader
 import qualified Data.Map as M
 import DataTypes
 import GCLParser.GCLDatatype
 import WLP
 import Z3.Monad hiding (substitute)
-import Z3Utils 
-import Control.Monad.RWS (MonadState(state))
+import Z3Utils
 
 -- TODO: Writer for reporting?
 type SymbolicExecution = ReaderT VerifierOptions Z3
@@ -22,10 +20,24 @@ symbolicExecution nd = do
     else case nodeStmt nd of
       Skip -> return $ Leaf nd
       Assign var expr -> return $ Leaf nd {nodeState = updateStateVar (nodeState nd) var expr}
-      AAssign var e1 e2 -> do 
+      AAssign var e1 e2 -> do
         let repby = RepBy (Var var) e1 e2
         return $ Leaf nd {nodeState = updateStateVar (nodeState nd) ("arr_" ++ var) repby}
-      Assume expr -> return $ Leaf nd {nodeState = assumeStateVar (nodeState nd) expr} -- Move checking to this point
+      Assume expr -> do
+        let (env, pathConstraint) = nodeState nd
+            pathConstraint' = BinopExpr And (updateExprVars env expr) pathConstraint
+            depth = nodeDepth nd
+
+        maxDepth <- asks maxDepth
+        prunePerc <- asks prunePercentage
+        let pruneDepth = case prunePerc of
+              Just p -> floor $ fromIntegral maxDepth * p
+              Nothing -> maxDepth + 1
+
+        constraintSat <- lift $ exprIsSat pathConstraint'
+        if depth <= pruneDepth && constraintSat
+          then return $ Leaf nd {nodeValidity = Infeasible "Path constraint is not satisfiable"}
+          else return $ Leaf nd {nodeState = assumeStateVar (nodeState nd) expr}
       Assert expr -> do
         (isValid', mModel) <- lift $ assertStateVar (nodeState nd) expr
         case (isValid', mModel) of
@@ -39,10 +51,10 @@ symbolicExecution nd = do
       Seq s1 s2 -> do
         firstNode <- symbolicExecution nd {nodeStmt = s1}
 
-        -- If firstNode is a Block vars body, we need to remove the vars from the symbolic state before continuing 
+        -- If firstNode is a Block vars body, we need to remove the vars from the symbolic state before continuing
         let isBlock = case s1 of
               Block _ _ -> True
-              _         -> False 
+              _ -> False
 
         let shouldContinue nd' =
               nodeDepth nd' < md && isValid (nodeValidity nd') && isFeasible (nodeValidity nd')
@@ -56,7 +68,7 @@ symbolicExecution nd = do
                             let (symEnv, pathConstraint) = nodeState childNd
                                 s1Vars = case s1 of
                                   Block vars _ -> map (\(VarDeclaration v _) -> v) vars
-                                  _            -> []
+                                  _ -> []
                                 newEnv = foldr M.delete symEnv s1Vars
                              in (newEnv, pathConstraint)
                           else nodeState childNd
@@ -74,27 +86,10 @@ symbolicExecution nd = do
         if not (isTreeFeasible firstNode)
           then return firstNode
           else go firstNode
-      IfThenElse guard s1 s2 -> do
-        let (env, pathConstraint) = nodeState nd
-            gTrue = updateExprVars env guard
-            gFalse = updateExprVars env (OpNeg guard)
-            trueCon = BinopExpr And gTrue pathConstraint
-            falseCon = BinopExpr And gFalse pathConstraint
-
-        trueSat <- lift $ exprIsSat trueCon
-        falseSat <- lift $ exprIsSat falseCon
-
-        trueBranch <-
-          if trueSat
-            then symbolicExecution nd {nodeStmt = Seq (Assume guard) s1}
-            else symbolicExecution nd {nodeStmt = Assume guard, nodeValidity = Infeasible "Guard is not satisfiable"}
-
-        falseBranch <-
-          if not trueSat || falseSat
-            then symbolicExecution nd {nodeStmt = Seq (Assume (OpNeg guard)) s2}
-            else symbolicExecution nd {nodeStmt = Assume (OpNeg guard), nodeValidity = Infeasible "Guard is not satisfiable"}
-
-        return $ Branch nd trueBranch falseBranch
+      IfThenElse guard s1 s2 ->
+        Branch nd
+          <$> symbolicExecution nd {nodeStmt = Seq (Assume guard) s1}
+          <*> symbolicExecution nd {nodeStmt = Seq (Assume (OpNeg guard)) s2}
       While guard body -> symbolicExecution nd {nodeStmt = IfThenElse guard (Seq body (While guard body)) Skip}
       Block vars body -> do
         let (symEnv, pathConstraint) = nodeState nd
