@@ -24,20 +24,19 @@ symbolicExecution nd = do
         let repby = RepBy (Var var) e1 e2
         return $ Leaf nd {nodeState = updateStateVar (nodeState nd) ("arr_" ++ var) repby}
       Assume expr -> do
-        let (env, pathConstraint) = nodeState nd
-            pathConstraint' = BinopExpr And (updateExprVars env expr) pathConstraint
-            depth = nodeDepth nd
-
         maxDepth <- asks maxDepth
         prunePerc <- asks prunePercentage
-        let pruneDepth = case prunePerc of
+
+        let depth = nodeDepth nd
+            nodeState' = assumeStateVar (nodeState nd) expr
+            pruneDepth = case prunePerc of
               Just p -> floor $ fromIntegral maxDepth * p
               Nothing -> maxDepth + 1
 
-        constraintSat <- lift $ exprIsSat pathConstraint'
-        if depth <= pruneDepth && constraintSat
+        constraintSat <- lift $ exprIsSat $ snd nodeState'
+        if depth <= pruneDepth && not constraintSat
           then return $ Leaf nd {nodeValidity = Infeasible "Path constraint is not satisfiable"}
-          else return $ Leaf nd {nodeState = assumeStateVar (nodeState nd) expr}
+          else return $ Leaf nd {nodeState = nodeState'}
       Assert expr -> do
         (isValid', mModel) <- lift $ assertStateVar (nodeState nd) expr
         case (isValid', mModel) of
