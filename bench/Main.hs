@@ -9,12 +9,14 @@ import GCLParser.Parser
 import Options.Applicative
 import System.Environment
 import Verifier
+import Criterion.Types (Config(csvFile))
 
 -- | Command-line options for the benchmark runner
 data Options = Options
   { gclFile :: FilePath,
     depths :: [Int],
-    prune :: [Double]
+    prune :: [Double],
+    csv :: Maybe FilePath
   }
 
 -- | Parser for command-line options
@@ -44,6 +46,14 @@ optsParser =
               <> help "The prune percentage for analysis (0.0-1.0, repeatable)"
           )
       )
+    <*> optional
+      ( strOption
+          ( long "csv"
+              <> metavar "FILE"
+              <> help "Output results in CSV format"
+              <> completer (bashCompleter "file")
+          )
+      )
 
 optsInfo :: ParserInfo Options
 optsInfo = info (optsParser <**> helper) (fullDesc <> progDesc "Benchmarking Bounded Model Checking for GCL Programs")
@@ -71,8 +81,8 @@ main = do
                     p <- pruneList
                 ]
             ]
-
+      let conf = defaultConfig { csvFile = csv }
       putStrLn $ "Benchmarking with depths: " ++ show depthList ++ " and prune percentages: " ++ show pruneList
-      withArgs [] $ defaultMainWith defaultConfig benchmarks
+      withArgs [] $ defaultMainWith conf benchmarks
   where
     label d p = "depth=" ++ show d ++ " prune=" ++ show p
