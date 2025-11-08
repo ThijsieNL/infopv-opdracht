@@ -1,27 +1,56 @@
-module Z3Utils(exprIsSat, exprIsSatWithModel, exprIsValid, exprIsValidWithModel) where
+module Z3Utils (exprIsSat, exprIsSatWithModel, exprIsValid, exprIsValidWithModel) where
 
-import Z3.Monad
-import GCLParser.GCLDatatype
 import Algebra
+import Control.Monad.Reader hiding (local)
+import Control.Monad.Writer
+import DataTypes (SymbolicExecution)
+import GCLParser.GCLDatatype
+import Z3.Monad
 
-exprIsSat :: Expr -> Z3 Bool
+-- | Calculate the size of all literals and variables in an expression
+getFormulaSize :: Expr -> Int
+getFormulaSize = foldExpr sizeAlgebra
+  where
+    sizeAlgebra :: ExprAlgebra Int
+    sizeAlgebra =
+      ExprAlgebra
+        { onVar = const 1,
+          onLitI = const 1,
+          onLitB = const 1,
+          onLitNull = 1,
+          onParens = id,
+          onArrayElem = (+),
+          onOpNeg = id,
+          onBinopExpr = \_ e1 e2 -> e1 + e2,
+          onForall = \_ body -> body,
+          onExists = \_ body -> body,
+          onSizeOf = id,
+          onRepBy = \arr idx val -> arr + idx + val,
+          onCond = \cond thenE elseE -> cond + thenE + elseE,
+          onNewStore = id,
+          onDereference = const 1
+        }
+
+exprIsSat :: Expr -> SymbolicExecution Bool
 exprIsSat = fmap ((== Sat) . fst) . exprIsSatWithModel
 
-exprIsSatWithModel :: Expr -> Z3 (Result, Maybe Model)
-exprIsSatWithModel expr = local $ do
-  z3expr <- exprToZ3 expr
-  -- z3expr <- mkBool True -- TODO: Fix translation
-  assert z3expr
-  result <- check
-  getModel
+exprIsSatWithModel :: Expr -> SymbolicExecution (Result, Maybe Model)
+exprIsSatWithModel expr = do
+  tell [getFormulaSize expr] -- Log the formula size
+  lift $ lift $ local $ do
+    z3expr <- exprToZ3 expr
+    assert z3expr
+    result <- check
+    getModel
 
-exprIsValidWithModel :: Expr -> Z3 (Bool, Maybe Model)
-exprIsValidWithModel expr = exprIsSatWithModel (OpNeg expr) >>= \case
-  (Unsat, _) -> return (True, Nothing)
-  (Sat, m)   -> return (False, m)
-  (Undef, _) -> error "Z3 returned UNKNOWN"
+exprIsValidWithModel :: Expr -> SymbolicExecution (Bool, Maybe Model)
+exprIsValidWithModel expr =
+  exprIsSatWithModel (OpNeg expr) >>= \case
+    (Unsat, _) -> return (True, Nothing)
+    (Sat, m) -> return (False, m)
+    (Undef, _) -> error "Z3 returned UNKNOWN"
 
-exprIsValid :: Expr -> Z3 Bool
+exprIsValid :: Expr -> SymbolicExecution Bool
 exprIsValid = fmap fst . exprIsValidWithModel
 
 exprToZ3 :: Expr -> Z3 AST
@@ -33,11 +62,11 @@ exprToZ3Algebra =
     { onVar = \v -> do
         sym <- mkStringSymbol v
         intSort <- mkIntSort
-        if take 4 v == "arr_" then do
-          arrSort <- mkArraySort intSort intSort
-          mkConst sym arrSort
-        else do
-          mkConst sym intSort,
+        if take 4 v == "arr_"
+          then do
+            arrSort <- mkArraySort intSort intSort
+            mkConst sym arrSort
+          else mkConst sym intSort,
       onLitI = mkInteger . toInteger,
       onLitB = mkBool,
       onLitNull = mkInteger 0, -- Represent null as 0 for simplicity
@@ -64,12 +93,12 @@ exprToZ3Algebra =
         arrAst <- arr
         idxAst <- idx
         mkSelect arrAst idxAst,
-      onForall = \var body -> do 
+      onForall = \var body -> do
         bodyAst <- body
         intSort <- mkIntSort
         symbol <- mkStringSymbol var
         mkForall [] [symbol] [intSort] bodyAst,
-      onExists = \var body -> do 
+      onExists = \var body -> do
         bodyAst <- body
         intSort <- mkIntSort
         symbol <- mkStringSymbol var

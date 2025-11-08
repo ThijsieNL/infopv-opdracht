@@ -6,12 +6,13 @@ import GCLParser.GCLDatatype
 import GCLParser.Parser
 import Mermaid
 import Options.Applicative as Opt
+import System.CPUTime (getCPUTime)
 import Verifier
 
 data Options = Options
   { gclFile :: FilePath,
     k :: Int,
-    prunePercentage :: Maybe Double,
+    prunePercentage :: Double,
     showTree :: Bool
   }
   deriving (Show)
@@ -37,7 +38,7 @@ opts =
       ( short 'p'
           <> metavar "NUM"
           <> help "The max depth percentage on which pruning is applied (0.0-1.0)"
-          <> value Nothing
+          <> value 1.0
           <> showDefault
       )
     <*> switch
@@ -54,14 +55,23 @@ main = do
     Left err -> putStrLn $ "Error parsing GCL file: " ++ err
     Right program -> do
       let programStmt = stmt program
-      putStrLn "\nOriginal Statement:"
+      putStrLn "Original Statement:"
       print programStmt
 
-      putStrLn "\nAnalyzing Program with Bounded Model Checking:"
-      AnalysisResult {..} <- analyzeProgram (VerifierOptions { maxDepth = k, prunePercentage = prunePercentage}) program
+      putStrLn $ "Analyzing " ++ name program ++ " with max depth " ++ show k ++ " and max depth prune percentage " ++ show prunePercentage ++ "..."
 
+      start <- getCPUTime
+      AnalysisResult {..} <- analyzeProgram (VerifierOptions {maxDepth = k, prunePercentage = prunePercentage}) program
+      end <- getCPUTime
+      let diff = fromIntegral (end - start) / (10 ^ 9) -- milliseconds
       if isValidResult
-        then putStrLn "\nThe program is VALID within the given bounds."
-        else putStrLn "\nThe program is INVALID within the given bounds."
+        then putStrLn "The program is VALID within the given bounds."
+        else putStrLn "The program is INVALID within the given bounds."
+
+      putStrLn $ "Total Z3 Invocations: " ++ show z3Invocations
+      putStrLn $ "Total Formula Size: " ++ show formulaSize
+      putStrLn $ "Total Paths: " ++ show totalPaths
+      putStrLn $ "Unfeasible Paths: " ++ show unfeasiblePaths
+      putStrLn $ "Total Execution Time: " ++ show diff ++ "ms"
 
       when showTree $ putStrLn $ showMermaid program symbolicTree

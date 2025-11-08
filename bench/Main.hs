@@ -2,13 +2,13 @@ module Main (main) where
 
 import Control.Exception
 import Criterion.Main
+import Criterion.Main.Options (parseWith)
 import DataTypes
 import GCLParser.GCLDatatype
 import GCLParser.Parser
 import Options.Applicative
-import Verifier
 import System.Environment
-import Criterion.Main.Options (parseWith)
+import Verifier
 
 -- | Command-line options for the benchmark runner
 data Options = Options
@@ -66,13 +66,13 @@ main = do
             [ bgroup
                 ("Benchmarking " ++ name prog)
                 [ bench (label d p) $
-                    whnfIO (analyzeProgram VerifierOptions {maxDepth = d, prunePercentage = Just p} prog)
+                    whnfIO (analyzeProgram VerifierOptions {maxDepth = d, prunePercentage = p} prog)
                   | d <- depthList,
                     p <- pruneList
                 ]
             ]
 
-      putStrLn $ "Benchmarking with depths: " ++ show depthList ++ " and prune percentages: " ++ show pruneList 
+      putStrLn $ "Benchmarking with depths: " ++ show depthList ++ " and prune percentages: " ++ show pruneList
       withArgs [] $ defaultMainWith defaultConfig benchmarks
   where
     label d p = "depth=" ++ show d ++ " prune=" ++ show p

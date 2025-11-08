@@ -1,16 +1,13 @@
 module SymbolicExecution where
 
-import Control.Monad.RWS (MonadState (state))
 import Control.Monad.Reader
+import Control.Monad.Writer
 import qualified Data.Map as M
 import DataTypes
 import GCLParser.GCLDatatype
 import WLP
 import Z3.Monad hiding (substitute)
 import Z3Utils
-
--- TODO: Writer for reporting?
-type SymbolicExecution = ReaderT VerifierOptions Z3
 
 symbolicExecution :: NodeData -> SymbolicExecution SymbolicTree
 symbolicExecution nd = do
@@ -29,16 +26,14 @@ symbolicExecution nd = do
 
         let depth = nodeDepth nd
             nodeState' = assumeStateVar (nodeState nd) expr
-            pruneDepth = case prunePerc of
-              Just p -> floor $ fromIntegral maxDepth * p
-              Nothing -> maxDepth + 1
+            pruneDepth = floor $ fromIntegral maxDepth * prunePerc
 
-        constraintSat <- lift $ exprIsSat $ snd nodeState'
+        constraintSat <- exprIsSat $ snd nodeState'
         if depth <= pruneDepth && not constraintSat
           then return $ Leaf nd {nodeValidity = Infeasible "Path constraint is not satisfiable"}
           else return $ Leaf nd {nodeState = nodeState'}
       Assert expr -> do
-        (isValid', mModel) <- lift $ assertStateVar (nodeState nd) expr
+        (isValid', mModel) <- assertStateVar (nodeState nd) expr
         case (isValid', mModel) of
           (True, _) -> return $ Leaf nd {nodeValidity = Valid}
           (False, Just (e, m)) -> do
@@ -99,9 +94,9 @@ symbolicExecution nd = do
 
 -- | Check if the symbolic execution tree contains any feasible valid paths
 isTreeFeasible :: SymbolicTree -> Bool
-isTreeFeasible (Branch nd l r) = isValid (nodeValidity nd) && (isTreeFeasible l || isTreeFeasible r)
-isTreeFeasible (Sequence nd n) = isValid (nodeValidity nd) && isTreeFeasible n
-isTreeFeasible (Leaf nd) = isValid (nodeValidity nd)
+isTreeFeasible (Branch nd l r) = isFeasible (nodeValidity nd) && (isTreeFeasible l || isTreeFeasible r)
+isTreeFeasible (Sequence nd n) = isFeasible (nodeValidity nd) && isTreeFeasible n
+isTreeFeasible (Leaf nd) = isFeasible (nodeValidity nd)
 
 -- | Check if the symbolic execution tree contains any invalid paths
 isTreeInvalid :: SymbolicTree -> Bool
@@ -127,7 +122,7 @@ assumeStateVar (env, constraint) expr =
    in (env, newConstraint)
 
 -- | Function to assert a condition in the symbolic state
-assertStateVar :: SymbolicState -> Expr -> Z3 (Bool, Maybe (Expr, Model))
+assertStateVar :: SymbolicState -> Expr -> SymbolicExecution (Bool, Maybe (Expr, Model))
 assertStateVar (env, constraint) expr = do
   let fullExpr = BinopExpr Implication constraint (updateExprVars env expr)
   result <- exprIsValidWithModel fullExpr

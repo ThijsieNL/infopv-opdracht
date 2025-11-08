@@ -1,17 +1,17 @@
 module DataTypes where
 
+import Control.Monad.Reader
+import Control.Monad.Writer
 import qualified Data.Map as M
 import GCLParser.GCLDatatype
+import Z3.Monad
+
+type SymbolicExecution = WriterT [Int] (ReaderT VerifierOptions Z3)
 
 data VerifierOptions = VerifierOptions
   { maxDepth :: Int,
-    prunePercentage :: Maybe Double
+    prunePercentage :: Double
   }
-
-data VerifierReport = VerifierReport
-  { totalZ3Calls :: Int
-  }
-  deriving (Show)
 
 type SymEnv = M.Map String Expr
 
@@ -28,13 +28,13 @@ mapVarDecls decls = M.fromList $ concatMap createEntry decls
     createEntry (VarDeclaration var (AType _)) =
       let arrVar = "arr_" ++ var
           lenVar = "len_" ++ var
-      in [(arrVar, Var (arrVar ++ "0")), (lenVar, Var (lenVar ++ "0"))]
+       in [(arrVar, Var (arrVar ++ "0")), (lenVar, Var (lenVar ++ "0"))]
     createEntry (VarDeclaration var _) = [(var, Var (var ++ "0"))]
 
 type SymbolicState = (SymEnv, Expr) -- (Environment, Path Constraint)
 
 data Validity = Valid | Invalid String | Infeasible String -- Valid or Invalid and Infeasible with reason
-    deriving (Show, Eq)
+  deriving (Show, Eq)
 
 isValid :: Validity -> Bool
 isValid (Invalid _) = False
@@ -52,18 +52,19 @@ data NodeData = NodeData
   }
   deriving (Show)
 
-
-data AnalysisResult = AnalysisResult {
-    symbolicTree :: SymbolicTree,
+data AnalysisResult = AnalysisResult
+  { symbolicTree :: SymbolicTree,
     isValidResult :: Bool,
-    z3Invocations :: Int
-} 
-    deriving (Show)
-
+    z3Invocations :: Int,
+    formulaSize :: Int,
+    totalPaths :: Int,
+    unfeasiblePaths :: Int
+  }
+  deriving (Show)
 
 -- TODO: If we remove the nd on the branch we can skip pruning these nd's
 data SymbolicTree = Branch NodeData SymbolicTree SymbolicTree | Sequence NodeData SymbolicTree | Leaf NodeData
-    deriving (Show)
+  deriving (Show)
 
 getNodeData :: SymbolicTree -> NodeData
 getNodeData (Leaf nd) = nd
