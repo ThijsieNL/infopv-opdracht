@@ -1,16 +1,14 @@
-{-# LANGUAGE LambdaCase #-}
 module Z3Utils(exprIsSat, exprIsSatWithModel, exprIsValid, exprIsValidWithModel) where
 
 import Z3.Monad
 import GCLParser.GCLDatatype
 import Algebra
-import Debug.Trace
 
 exprIsSat :: Expr -> Z3 Bool
 exprIsSat = fmap ((== Sat) . fst) . exprIsSatWithModel
 
 exprIsSatWithModel :: Expr -> Z3 (Result, Maybe Model)
-exprIsSatWithModel expr = trace ("Z3 evaluation on: " ++ show expr) $ local $ do
+exprIsSatWithModel expr = local $ do
   z3expr <- exprToZ3 expr
   -- z3expr <- mkBool True -- TODO: Fix translation
   assert z3expr

@@ -1,6 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RecordWildCards #-}
-
 module Main (main) where
 
 import Control.Monad
@@ -61,7 +58,7 @@ main = do
       print programStmt
 
       putStrLn "\nAnalyzing Program with Bounded Model Checking:"
-      AnalysisResult {..} <- analyzeProgram (VerifierOptions {verbose = False, maxDepth = k, prunePercentage = prunePercentage}) program
+      AnalysisResult {..} <- analyzeProgram (VerifierOptions { maxDepth = k, prunePercentage = prunePercentage}) program
 
       if isValidResult
         then putStrLn "\nThe program is VALID within the given bounds."

@@ -32,6 +32,9 @@ library parser
 
 library engine 
   default-language:  Haskell2010
+  default-extensions:
+    RecordWildCards
+    , LambdaCase
   hs-source-dirs:    src/Engine
   exposed-modules:   Verifier
                      , DataTypes
@@ -48,8 +51,25 @@ library engine
   -- location to z3 bin and lib:
   extra-lib-dirs:      /usr/lib/x86_64-linux-gnu
 
+executable gcl-benchmarker
+  default-language:  Haskell2010
+  default-extensions:
+    RecordWildCards
+    , LambdaCase
+  hs-source-dirs:    bench
+  main-is:           Main.hs
+  build-depends:     base   >= 4.10
+                     , engine
+                     , parser
+                     , optparse-applicative
+                     , criterion
+                     , deepseq
+
 executable gcl-verifier
   default-language:  Haskell2010
+  default-extensions:
+    RecordWildCards
+    , LambdaCase
   hs-source-dirs:    app
   main-is:           Main.hs
   build-depends:     base   >= 4.10
