@@ -47,6 +47,7 @@ opts =
       ( short 's'
           <> long "simplify"
           <> help "Simplify expressions during symbolic execution"
+          <> metavar "BOOL"
           <> value True
           <> showDefault
       )
