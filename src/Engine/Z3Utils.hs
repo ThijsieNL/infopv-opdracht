@@ -109,7 +109,11 @@ exprToZ3Algebra =
         idxAst <- idx
         valAst <- val
         mkStore arrAst idxAst valAst,
-      onCond = error "Conditional expressions not supported in Z3 translation",
+      onCond = \cond thenE elseE -> do
+        condAst <- cond
+        thenAst <- thenE
+        elseAst <- elseE
+        mkIte condAst thenAst elseAst, 
       onNewStore = error "NewStore not supported in Z3 translation",
       onDereference = error "Dereference not supported in Z3 translation"
     }
