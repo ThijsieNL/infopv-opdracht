@@ -5,7 +5,7 @@
 // N is an experiment parameter; replace it with a concrete value.
 
 pullUp(step:int , a:[]int | b:[]int) {
-   // N is an experiment parameter
+   N := 10 ; // N is an experiment parameter
    assume #a>=2 && #a=N && step>0 ;
 
    if a[0] >= a[1]
