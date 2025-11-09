@@ -19,33 +19,24 @@ analyzeProgram opts program = do
 
   (tree, z3Invocations) <- evalZ3 (runReaderT (runWriterT (symbolicExecution initialNode)) opts)
 
-  let reducedTree = pruneSkipBranches tree
-
   return $
     AnalysisResult
-      { symbolicTree = reducedTree,
-        isValidResult = not $ isTreeInvalid reducedTree,
+      { symbolicTree = tree,
+        isValidResult = not $ isTreeInvalid tree,
         z3Invocations = length z3Invocations,
         formulaSize = sum z3Invocations,
-        totalPaths = countTotalPaths reducedTree,
-        unfeasiblePaths = countUnfeasiblePaths reducedTree
+        totalPaths = countTotalPaths tree,
+        unfeasiblePaths = countUnfeasiblePaths tree
       }
-
--- | Prune the skip placeholder nodes from the symbolic execution tree
-pruneSkipBranches :: SymbolicTree -> SymbolicTree
-pruneSkipBranches (Branch nd l r) = Branch nd (pruneSkipBranches l) (pruneSkipBranches r)
-pruneSkipBranches (Sequence nd br@(Branch _ l r)) = Branch nd (pruneSkipBranches l) (pruneSkipBranches r)
-pruneSkipBranches (Sequence nd st) = Sequence nd (pruneSkipBranches st)
-pruneSkipBranches leaf = leaf
 
 -- | Count the total number of paths in the symbolic execution tree
 countTotalPaths :: SymbolicTree -> Int
 countTotalPaths (Leaf _) = 1
-countTotalPaths (Branch _ left right) = countTotalPaths left + countTotalPaths right
+countTotalPaths (Branch l r) = countTotalPaths l + countTotalPaths r
 countTotalPaths (Sequence _ st) = countTotalPaths st
 
 -- | Count the number of unfeasible paths in the symbolic execution tree
 countUnfeasiblePaths :: SymbolicTree -> Int
 countUnfeasiblePaths (Leaf nd) = if isFeasible (nodeValidity nd) then 0 else 1
 countUnfeasiblePaths (Sequence _ st) = countUnfeasiblePaths st
-countUnfeasiblePaths (Branch _ left right) = countUnfeasiblePaths left + countUnfeasiblePaths right
+countUnfeasiblePaths (Branch l r) = countUnfeasiblePaths l + countUnfeasiblePaths r

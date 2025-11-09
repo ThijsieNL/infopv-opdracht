@@ -62,11 +62,5 @@ data AnalysisResult = AnalysisResult
   }
   deriving (Show)
 
--- TODO: If we remove the nd on the branch we can skip pruning these nd's
-data SymbolicTree = Branch NodeData SymbolicTree SymbolicTree | Sequence NodeData SymbolicTree | Leaf NodeData
+data SymbolicTree = Branch SymbolicTree SymbolicTree | Sequence NodeData SymbolicTree | Leaf NodeData
   deriving (Show)
-
-getNodeData :: SymbolicTree -> NodeData
-getNodeData (Leaf nd) = nd
-getNodeData (Sequence nd _) = nd
-getNodeData (Branch nd _ _) = nd

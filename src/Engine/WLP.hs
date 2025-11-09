@@ -55,29 +55,6 @@ performArithmetic Multiply = (*)
 performArithmetic Divide = div
 performArithmetic _ = error "Unsupported operation for constant folding"
 
-stmtToWlp :: Int -> Stmt -> Expr -> Expr
-stmtToWlp k =
-  foldStmt
-    StmtAlgebra
-      { onSkip = id,
-        onAssert = opAnd,
-        onAssume = opImplication,
-        onAssign = substitute,
-        onAAssign = \_ _ _ -> error "WLP for array assignments not implemented yet",
-        onDrefAssign = \_ _ -> error "WLP for dereference assignments not implemented yet",
-        onSeq = \s1 s2 post -> s1 (s2 post),
-        onIfThenElse = \guard s1 s2 post -> opAnd (opImplication guard (s1 post)) (opImplication (OpNeg guard) (s2 post)),
-        onWhile = iterateWlpBounded k,
-        onBlock = \_ f -> f,
-        onTryCatch = \_ _ _ -> error "WLP for TryCatch not implemented yet"
-      }
-
--- We need to create a fixed-point combinator for while loops
-iterateWlpBounded :: Int -> Expr -> (Expr -> Expr) -> Expr -> Expr
-iterateWlpBounded 0 _ _ post = post
-iterateWlpBounded k guard f post =
-  opAnd (opImplication (OpNeg guard) post) (opImplication guard (f (iterateWlpBounded (k - 1) guard f post)))
-
 substitute :: String -> Expr -> Expr -> Expr
 substitute var new = foldExpr $ substituteAlgebra var new
 

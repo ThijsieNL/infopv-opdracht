@@ -11,45 +11,49 @@ showMermaid :: Program -> SymbolicTree -> String
 showMermaid program root = unlines $ "stateDiagram-v2" : indent (origin ++ nodeLines root)
   where
     indent = map ("  " ++)
-    nodeData = getNodeData root
     initialState = (createSymEnv program, LitB True)
-    origin = ["0 : " ++ sanitizeStr (showSymbolicState initialState) ++ "0", "0 --> " ++ show (uniqueId root) ++ ": " ++ sanitizeStr (show (nodeStmt nodeData))]
+    origin = ["0 : " ++ sanitizeStr (showSymbolicState initialState) ++ "0"]
 
 -- | Convert a SymbolicTree to a list of lines describing nodes and transitions
 nodeLines :: SymbolicTree -> [String]
-nodeLines = go
+nodeLines = go 0
   where
     -- common function to generate a label for a node
+    nodeLabel :: NodeData -> String
     nodeLabel nd = sanitizeStr $ showSymbolicState (nodeState nd) ++ showValidity (nodeValidity nd) ++ show (nodeDepth nd)
 
     -- common function to generate the node's line
+    nodeLine :: SymbolicTree -> String
     nodeLine constructor = show (uniqueId constructor) ++ " : " ++ nodeLabel (getNodeData constructor)
 
     -- common function to generate a transition line
-    transitionLine from to = show (uniqueId from) ++ " --> " ++ show (uniqueId to) ++ " : " ++ sanitizeStr (show (nodeStmt (getNodeData to)))
+    transitionLine :: Int -> SymbolicTree -> String
+    transitionLine from to = show from ++ " --> " ++ show (uniqueId to) ++ " : " ++ sanitizeStr (show (nodeStmt (getNodeData to)))
 
+    lineBreakToComma :: String -> String
     lineBreakToComma [] = []
     lineBreakToComma reason = ": " ++ concatMap (\c -> if c `elem` "\r\n" then ", " else [c]) reason
 
+    showValidity :: Validity -> String
     showValidity (Infeasible reason) = " [INFEASIBLE" ++ lineBreakToComma reason ++ "]<br>"
     showValidity (Invalid reason) = " [INVALID" ++ lineBreakToComma reason ++ "]<br>"
     showValidity _ = ""
 
-    go (Leaf nd) = [nodeLine (Leaf nd)]
-    go (Sequence nd st) =
-      let thisNode = nodeLine (Sequence nd st)
-          trans = [transitionLine (Sequence nd st) st]
-       in thisNode : go st ++ trans
-    go (Branch nd left right) =
-      let thisNode = nodeLine (Branch nd left right)
-          trans = [transitionLine (Branch nd left right) left, transitionLine (Branch nd left right) right]
-       in thisNode : go left ++ go right ++ trans
+    getNodeData :: SymbolicTree -> NodeData
+    getNodeData (Leaf nd) = nd
+    getNodeData (Sequence nd _) = nd
+    getNodeData (Branch _ _) = error "Branch nodes do not have NodeData" 
+
+    go :: Int -> SymbolicTree -> [String]
+    go id n@(Leaf _) = [nodeLine n, transitionLine id n]
+    go id n@(Sequence _ st) = [nodeLine n, transitionLine id n] ++ go (uniqueId n) st
+    go id (Branch l r) = go id l ++ go id r
 
 -- | Generate a unique ID for a SymbolicTree based on its content
 uniqueId :: SymbolicTree -> Int
 uniqueId tree = abs $ hash $ show tree
 
--- | Sanitize a mermaid string for compatibility 
+-- | Sanitize a mermaid string for compatibility
 sanitizeStr :: String -> String
 sanitizeStr = concatMap replaceColon
   where
