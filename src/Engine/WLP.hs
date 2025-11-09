@@ -32,7 +32,14 @@ reduceAlgebra =
         -- Constant folding for arithmetic operations for now only Plus and Minus
         (Plus, _, _) -> constantFolding (BinopExpr Plus e1 e2)
         (Minus, _, _) -> constantFolding (BinopExpr Minus e1 e2)
-        _ -> BinopExpr op e1 e2
+        _ -> BinopExpr op e1 e2,
+      onArrayElem = \arrExpr i ->
+        case arrExpr of
+          RepBy arr idx val ->
+            if idx == i
+              then val -- Direct replacement if index matches
+              else ArrayElem arr i
+          _ -> ArrayElem arrExpr i
     }
 
     where

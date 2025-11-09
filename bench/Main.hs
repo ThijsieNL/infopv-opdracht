@@ -3,7 +3,7 @@ module Main (main) where
 import Control.Exception
 import Criterion.Main
 import Criterion.Main.Options (parseWith)
-import Criterion.Types (Config (csvFile))
+import Criterion.Types (Config (csvFile, reportFile))
 import DataTypes
 import GCLParser.GCLDatatype
 import GCLParser.Parser
@@ -17,7 +17,8 @@ data Options = Options
     depths :: [Int],
     prune :: [Double],
     simplify :: Maybe Bool,
-    csv :: Maybe FilePath
+    csv :: Maybe FilePath,
+    html :: Maybe FilePath
   }
 
 -- | Parser for command-line options
@@ -64,6 +65,14 @@ optsParser =
               <> completer (bashCompleter "file")
           )
       )
+    <*> optional
+      ( strOption
+          ( long "html"
+              <> metavar "FILE"
+              <> help "Output results in HTML format"
+              <> completer (bashCompleter "file")
+          )
+      )
 
 optsInfo :: ParserInfo Options
 optsInfo = info (optsParser <**> helper) (fullDesc <> progDesc "Benchmarking Bounded Model Checking for GCL Programs")
@@ -88,7 +97,7 @@ main = do
           label d p s = "depth=" ++ show d ++ " prune=" ++ show p ++ " simplify=" ++ show s
           benchmarks =
             [ bgroup
-                ("Benchmarking " ++ name prog)
+                (name prog)
                 [ bench (label d p s) $
                     whnfIO (analyzeProgram VerifierOptions {maxDepth = d, prunePercentage = p, simplifyExpr = s} prog)
                   | d <- depthList,
@@ -96,7 +105,7 @@ main = do
                     s <- simplifyList
                 ]
             ]
-      let conf = defaultConfig {csvFile = csv}
+      let conf = defaultConfig {csvFile = csv, reportFile = html}
       putStrLn $ "Benchmarking with depths: " ++ show depthList ++ " and prune percentages: " ++ show pruneList
       withArgs [] $ defaultMainWith conf benchmarks
   where
