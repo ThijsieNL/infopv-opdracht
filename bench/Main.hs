@@ -3,19 +3,20 @@ module Main (main) where
 import Control.Exception
 import Criterion.Main
 import Criterion.Main.Options (parseWith)
+import Criterion.Types (Config (csvFile))
 import DataTypes
 import GCLParser.GCLDatatype
 import GCLParser.Parser
 import Options.Applicative
 import System.Environment
 import Verifier
-import Criterion.Types (Config(csvFile))
 
 -- | Command-line options for the benchmark runner
 data Options = Options
   { gclFile :: FilePath,
     depths :: [Int],
     prune :: [Double],
+    simplify :: Maybe Bool,
     csv :: Maybe FilePath
   }
 
@@ -47,6 +48,15 @@ optsParser =
           )
       )
     <*> optional
+      ( option
+          auto
+          ( short 's'
+              <> long "simplify"
+              <> metavar "BOOL"
+              <> help "Whether to simplify expressions during symbolic execution"
+          )
+      )
+    <*> optional
       ( strOption
           ( long "csv"
               <> metavar "FILE"
@@ -72,17 +82,22 @@ main = do
 
       let depthList = if null depths then [10, 20, 50] else depths
           pruneList = if null prune then [0.0, 0.5, 1.0] else prune
+          simplifyList = case simplify of
+            Just b -> [b]
+            Nothing -> [True, False]
+          label d p s = "depth=" ++ show d ++ " prune=" ++ show p ++ " simplify=" ++ show s
           benchmarks =
             [ bgroup
                 ("Benchmarking " ++ name prog)
-                [ bench (label d p) $
-                    whnfIO (analyzeProgram VerifierOptions {maxDepth = d, prunePercentage = p} prog)
+                [ bench (label d p s) $
+                    whnfIO (analyzeProgram VerifierOptions {maxDepth = d, prunePercentage = p, simplifyExpr = s} prog)
                   | d <- depthList,
-                    p <- pruneList
+                    p <- pruneList,
+                    s <- simplifyList
                 ]
             ]
-      let conf = defaultConfig { csvFile = csv }
+      let conf = defaultConfig {csvFile = csv}
       putStrLn $ "Benchmarking with depths: " ++ show depthList ++ " and prune percentages: " ++ show pruneList
       withArgs [] $ defaultMainWith conf benchmarks
   where
-    label d p = "depth=" ++ show d ++ " prune=" ++ show p
+    label d p s = "depth=" ++ show d ++ " prune=" ++ show p ++ " simplify=" ++ show s

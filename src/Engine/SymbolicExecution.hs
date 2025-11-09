@@ -6,7 +6,7 @@ import qualified Data.Map as M
 import DataTypes
 import GCLParser.GCLDatatype
 import WLP
-import Z3.Monad hiding (substitute)
+import Z3.Monad
 import Z3Utils
 
 symbolicExecution :: NodeData -> SymbolicExecution SymbolicTree
@@ -20,28 +20,8 @@ symbolicExecution nd = do
       AAssign var e1 e2 -> do
         let repby = RepBy (Var var) e1 e2
         return $ Leaf nd {nodeState = updateStateVar (nodeState nd) ("arr_" ++ var) repby}
-      Assume expr -> do
-        maxDepth <- asks maxDepth
-        prunePerc <- asks prunePercentage
-
-        let depth = nodeDepth nd
-            nodeState' = assumeStateVar (nodeState nd) expr
-            pruneDepth = floor $ fromIntegral maxDepth * prunePerc
-
-        constraintSat <- exprIsSat $ snd nodeState'
-        if depth <= pruneDepth && not constraintSat
-          then return $ Leaf nd {nodeValidity = Infeasible "Path constraint is not satisfiable"}
-          else return $ Leaf nd {nodeState = nodeState'}
-      Assert expr -> do
-        (isValid', mModel) <- assertStateVar (nodeState nd) expr
-        case (isValid', mModel) of
-          (True, _) -> return $ Leaf nd {nodeValidity = Valid}
-          (False, Just (e, m)) -> do
-            modelStr <- lift $ modelToString m
-            let (env, constraint) = nodeState nd
-                fullExpr = BinopExpr Implication constraint (updateExprVars env expr)
-            return $ Leaf nd {nodeValidity = Invalid $ show e ++ "<br>(" ++ modelStr ++ ")"}
-          (False, Nothing) -> return $ Leaf nd {nodeValidity = Invalid " No model available"}
+      Assume expr -> Leaf <$> assumeStateVar nd expr
+      Assert expr -> Leaf <$> assertStateVar nd expr
       Seq s1 s2 -> do
         firstNode <- symbolicExecution nd {nodeStmt = s1}
 
@@ -111,19 +91,49 @@ updateStateVar (env, constraint) var expr =
 
 -- | Function to update expressions based on the current symbolic environment
 updateExprVars :: SymEnv -> Expr -> Expr
-updateExprVars env expr = foldr (\(k, v) acc -> substitute k v acc) expr (M.toList env)
+updateExprVars env expr = foldr (\(k, v) acc -> substituteExpr k v acc) expr (M.toList env)
 
 -- | Function to add a new assumption to the path constraint
-assumeStateVar :: SymbolicState -> Expr -> SymbolicState
-assumeStateVar (env, constraint) expr =
-  let newConstraint = BinopExpr And (updateExprVars env expr) constraint
-   in (env, newConstraint)
+assumeStateVar :: NodeData -> Expr -> SymbolicExecution NodeData
+assumeStateVar nd expr = do
+  maxDepth <- asks maxDepth
+  prunePerc <- asks prunePercentage
+  simplify <- asks simplifyExpr
+
+  let depth = nodeDepth nd
+      pruneDepth = floor $ fromIntegral maxDepth * prunePerc
+      (env, constraint) = nodeState nd
+      constraint' = BinopExpr And constraint (updateExprVars env expr)
+
+  if depth > pruneDepth
+    then return nd {nodeState = (env, constraint')} -- Do not simplify or check satisfiability beyond prune depth
+    else do
+      let reducedExpr = if simplify then reduceExpr constraint' else constraint'
+          nd' = nd {nodeState = (env, reducedExpr)}
+
+      constraintSat <- exprIsSat reducedExpr
+      if reducedExpr == LitB False || not constraintSat
+        then return nd' {nodeValidity = Infeasible "Path constraint is unsatisfiable"}
+        else return nd'
 
 -- | Function to assert a condition in the symbolic state
-assertStateVar :: SymbolicState -> Expr -> SymbolicExecution (Bool, Maybe (Expr, Model))
-assertStateVar (env, constraint) expr = do
-  let fullExpr = BinopExpr Implication constraint (updateExprVars env expr)
-  result <- exprIsValidWithModel fullExpr
-  case result of
-    (True, _) -> return (True, Nothing)
-    (False, mModel) -> return (False, fmap (\m -> (reduceExpr fullExpr, m)) mModel)
+assertStateVar :: NodeData -> Expr -> SymbolicExecution NodeData
+assertStateVar nd expr = do
+  simplify <- asks simplifyExpr
+  let (env, constraint) = nodeState nd
+      fullExpr = BinopExpr Implication constraint (updateExprVars env expr)
+      reducedExpr = if simplify then reduceExpr fullExpr else fullExpr
+
+  if reducedExpr == LitB True
+    then return nd {nodeValidity = Valid} -- Trivially valid
+    else do
+      result <- exprIsValidWithModel fullExpr
+      case result of
+        (True, _) -> return nd {nodeValidity = Valid}
+        (False, mModel) -> do
+          msg <- case mModel of
+            Just m -> do
+              modelStr <- lift $ modelToString m
+              return $ show reducedExpr ++ "<br>(" ++ modelStr ++ ")"
+            Nothing -> return "No model available"
+          return nd {nodeValidity = Invalid msg}

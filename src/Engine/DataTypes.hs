@@ -10,7 +10,8 @@ type SymbolicExecution = WriterT [Int] (ReaderT VerifierOptions Z3)
 
 data VerifierOptions = VerifierOptions
   { maxDepth :: Int,
-    prunePercentage :: Double
+    prunePercentage :: Double,
+    simplifyExpr :: Bool
   }
 
 type SymEnv = M.Map String Expr

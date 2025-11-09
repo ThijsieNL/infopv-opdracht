@@ -13,6 +13,7 @@ data Options = Options
   { gclFile :: FilePath,
     k :: Int,
     prunePercentage :: Double,
+    simplify :: Bool,
     showTree :: Bool
   }
   deriving (Show)
@@ -41,6 +42,14 @@ opts =
           <> value 1.0
           <> showDefault
       )
+    <*> option
+      auto
+      ( short 's'
+          <> long "simplify"
+          <> help "Simplify expressions during symbolic execution"
+          <> value True
+          <> showDefault
+      )
     <*> switch
       ( long "show-tree"
           <> help "Show the symbolic execution tree"
@@ -61,7 +70,7 @@ main = do
       putStrLn $ "Analyzing " ++ name program ++ " with max depth " ++ show k ++ " and max depth prune percentage " ++ show prunePercentage ++ "..."
 
       start <- getCPUTime
-      AnalysisResult {..} <- analyzeProgram (VerifierOptions {maxDepth = k, prunePercentage = prunePercentage}) program
+      AnalysisResult {..} <- analyzeProgram (VerifierOptions {maxDepth = k, prunePercentage = prunePercentage, simplifyExpr = simplify}) program
       end <- getCPUTime
       let diff = fromIntegral (end - start) / (10 ^ 9) -- milliseconds
       if isValidResult
